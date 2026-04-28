@@ -20,21 +20,30 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.pradeep.medbox"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    // Release signing — reads from environment variables set by the CI workflow.
+    // For local release builds, set the same variables in your shell or a
+    // local.properties file (never commit credentials to version control).
+    signingConfigs {
+        create("release") {
+            storeFile     = file("medbox.jks")
+            storePassword = System.getenv("ANDROID_STORE_PASSWORD") ?: ""
+            keyAlias      = System.getenv("ANDROID_KEY_ALIAS")      ?: ""
+            keyPassword   = System.getenv("ANDROID_KEY_PASSWORD")   ?: ""
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled   = false
+            isShrinkResources = false
         }
     }
 }

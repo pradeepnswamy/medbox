@@ -1,0 +1,105 @@
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Flutter ─────────────────────────────────────────────────────────────
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.0'
+          channel: stable
+          cache: true
+
+      # ── Firebase config ──────────────────────────────────────────────────────
+      # Store the file contents as a base64 secret in GitHub:
+      #   cat ios/Runner/GoogleService-Info.plist | base64 | pbcopy
+      # Then add as secret: GOOGLE_SERVICE_INFO_PLIST_BASE64
+      - name: Write GoogleService-Info.plist
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}" | base64 --decode \
+            > ios/Runner/GoogleService-Info.plist
+
+      # ── Dependencies ─────────────────────────────────────────────────────────
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      # ── Lint & test ──────────────────────────────────────────────────────────
+      - name: Analyse
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      # ── Code signing ─────────────────────────────────────────────────────────
+      # Export your .p12 certificate from Keychain Access, then encode:
+      #   cat certificate.p12 | base64 | pbcopy  → IOS_CERTIFICATE_BASE64
+      #   certificate password                   → IOS_CERTIFICATE_PASSWORD
+      #
+      # Download your provisioning profile from developer.apple.com, then encode:
+      #   cat profile.mobileprovision | base64 | pbcopy → IOS_PROVISIONING_PROFILE_BASE64
+      #
+      # Pick any password for the temporary keychain:   → IOS_KEYCHAIN_PASSWORD
+      - name: Install certificate and provisioning profile
+        run: |
+          # Create a temporary keychain
+          security create-keychain -p "${{ secrets.IOS_KEYCHAIN_PASSWORD }}" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "${{ secrets.IOS_KEYCHAIN_PASSWORD }}" build.keychain
+
+          # Import certificate
+          echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 --decode > certificate.p12
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "${{ secrets.IOS_KEYCHAIN_PASSWORD }}" build.keychain
+
+          # Add keychain to search list
+          security list-keychains -d user -s build.keychain
+
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/medbox.mobileprovision
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build IPA
+        run: |
+          flutter build ipa --release \
+            --dart-define=FLUTTER_BUILD_NAME=1.0.0 \
+            --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }}
+
+      # ── Upload artifact ──────────────────────────────────────────────────────
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: medbox-${{ github.run_number }}.ipa
+          path: build/ios/ipa/medbox.ipa
+          retention-days: 30
+
+      # ── Cleanup keychain ─────────────────────────────────────────────────────
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain build.keychain

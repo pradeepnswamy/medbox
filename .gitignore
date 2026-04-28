@@ -50,3 +50,6 @@ GoogleService-Info.plist
 
 # Icon preview (review artifact, not part of the app)
 medbox_icon_preview.png
+
+# Android release keystore
+android/app/medbox.jks

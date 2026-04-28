@@ -1,0 +1,79 @@
+name: Android build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android App Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Flutter ─────────────────────────────────────────────────────────────
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.0'
+          channel: stable
+          cache: true
+
+      # ── Firebase config ──────────────────────────────────────────────────────
+      # Store the file contents as a base64 secret in GitHub:
+      #   cat android/app/google-services.json | base64 | pbcopy
+      # Then add as secret: GOOGLE_SERVICES_JSON_BASE64
+      - name: Write google-services.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode \
+            > android/app/google-services.json
+
+      # ── Dependencies ─────────────────────────────────────────────────────────
+      - name: Install dependencies
+        run: flutter pub get
+
+      # ── Lint & test ──────────────────────────────────────────────────────────
+      - name: Analyse
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      # ── Keystore ─────────────────────────────────────────────────────────────
+      # Generate your keystore once:
+      #   keytool -genkey -v -keystore medbox.jks -alias medbox \
+      #     -keyalg RSA -keysize 2048 -validity 10000
+      # Then encode and store as secrets:
+      #   cat medbox.jks | base64 | pbcopy  → ANDROID_KEYSTORE_BASE64
+      #   store password                    → ANDROID_STORE_PASSWORD
+      #   key alias                         → ANDROID_KEY_ALIAS
+      #   key password                      → ANDROID_KEY_PASSWORD
+      - name: Write keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode \
+            > android/app/medbox.jks
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build App Bundle
+        run: |
+          flutter build appbundle --release \
+            --dart-define=FLUTTER_BUILD_NAME=1.0.0 \
+            --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }}
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS:      ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD:   ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      # ── Upload artifact ──────────────────────────────────────────────────────
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: medbox-${{ github.run_number }}.aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
