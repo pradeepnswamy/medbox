@@ -47,7 +47,7 @@ A Flutter app for family caregivers to track medicines, prescriptions, and expir
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/medbox.git
+git clone https://github.com/pradeepnswamy/medbox.git
 cd medbox
 ```
 
