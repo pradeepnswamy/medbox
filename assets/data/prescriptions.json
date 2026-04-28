@@ -1,0 +1,136 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "rx1",
+      "cause": "Viral Fever",
+      "date": "12 Apr 2025",
+      "dateFull": "12 April 2025",
+      "year": 2025,
+      "hospital": "City Hospital",
+      "hospitalFull": "City Hospital, Chennai",
+      "doctor": "Dr. Ramesh Kumar",
+      "notes": "Follow up in 5 days if fever persists.",
+      "patientName": "Ravi Kumar",
+      "patientInitials": "RK",
+      "patientAvatarColor": "#4ECBA0",
+      "medicineCount": 3,
+      "medicines": [
+        {
+          "name": "Paracetamol 500mg",
+          "dosage": "1 tab × 3/day · Exp Jun 2026",
+          "expiryLabel": "Jun 2026",
+          "status": "available",
+          "medicineId": "m3"
+        },
+        {
+          "name": "Amoxicillin 250mg",
+          "dosage": "1 cap × 2/day · Exp Apr 20",
+          "expiryLabel": "Apr 20",
+          "status": "expiring",
+          "medicineId": "m1"
+        },
+        {
+          "name": "ORS Sachet",
+          "dosage": "1 sachet in 1L water",
+          "expiryLabel": "Dec 2025",
+          "status": "available",
+          "medicineId": null
+        }
+      ]
+    },
+    {
+      "id": "rx2",
+      "cause": "Seasonal Allergy",
+      "date": "1 Mar 2025",
+      "dateFull": "1 March 2025",
+      "year": 2025,
+      "hospital": "Apollo Clinic",
+      "hospitalFull": "Apollo Clinic, Chennai",
+      "doctor": "Dr. Priya Nair",
+      "notes": "Avoid dust and cold air. Review in 2 weeks.",
+      "patientName": "Meena Kumar",
+      "patientInitials": "MK",
+      "patientAvatarColor": "#F48FB1",
+      "medicineCount": 2,
+      "medicines": [
+        {
+          "name": "Cetrizine 10mg",
+          "dosage": "1 tab × 1/day · Exp May 25",
+          "expiryLabel": "May 25",
+          "status": "opened",
+          "medicineId": "m2"
+        },
+        {
+          "name": "Montelukast 10mg",
+          "dosage": "1 tab at night · Exp Dec 2025",
+          "expiryLabel": "Dec 2025",
+          "status": "available",
+          "medicineId": null
+        }
+      ]
+    },
+    {
+      "id": "rx3",
+      "cause": "Diabetes Follow-up",
+      "date": "10 Feb 2025",
+      "dateFull": "10 February 2025",
+      "year": 2025,
+      "hospital": "MIOT Hospital",
+      "hospitalFull": "MIOT Hospital, Chennai",
+      "doctor": "Dr. Suresh Babu",
+      "notes": "Monitor blood sugar daily.",
+      "patientName": "Ravi Kumar",
+      "patientInitials": "RK",
+      "patientAvatarColor": "#4ECBA0",
+      "medicineCount": 1,
+      "medicines": [
+        {
+          "name": "Metformin 500mg",
+          "dosage": "1 tab × 2/day · Exp May 10",
+          "expiryLabel": "May 10",
+          "status": "expiring",
+          "medicineId": "m4"
+        }
+      ]
+    },
+    {
+      "id": "rx4",
+      "cause": "Ear Infection",
+      "date": "18 Nov 2024",
+      "dateFull": "18 November 2024",
+      "year": 2024,
+      "hospital": "Fortis",
+      "hospitalFull": "Fortis Hospital, Chennai",
+      "doctor": "Dr. Anitha Raj",
+      "notes": "Keep ear dry. Complete antibiotic course.",
+      "patientName": "Arjun Kumar",
+      "patientInitials": "AK",
+      "patientAvatarColor": "#FFAB91",
+      "medicineCount": 3,
+      "medicines": [
+        {
+          "name": "Amoxicillin 500mg",
+          "dosage": "1 cap × 3/day · Exp Mar 2025",
+          "expiryLabel": "Mar 2025",
+          "status": "available",
+          "medicineId": null
+        },
+        {
+          "name": "Ciprofloxacin Drops",
+          "dosage": "3 drops × 2/day",
+          "expiryLabel": "Feb 2025",
+          "status": "available",
+          "medicineId": null
+        },
+        {
+          "name": "Paracetamol 500mg",
+          "dosage": "1 tab as needed",
+          "expiryLabel": "Jun 2026",
+          "status": "available",
+          "medicineId": "m3"
+        }
+      ]
+    }
+  ]
+}

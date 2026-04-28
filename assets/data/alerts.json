@@ -1,0 +1,44 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "a1",
+      "medicineName": "Amoxicillin 250mg",
+      "daysValue": 4,
+      "daysLabel": "4 days",
+      "description": "Expires 20 Apr 2025 · Unopened bottles lose potency",
+      "patientName": "Ravi Kumar",
+      "patientInitials": "RK",
+      "patientAvatarColor": "#4ECBA0",
+      "type": "expiring",
+      "severity": "critical",
+      "isDismissed": false
+    },
+    {
+      "id": "a2",
+      "medicineName": "Metformin 500mg",
+      "daysValue": 24,
+      "daysLabel": "24 days",
+      "description": "Expires 10 May 2025 · Check if refill is needed",
+      "patientName": "Ravi Kumar",
+      "patientInitials": "RK",
+      "patientAvatarColor": "#4ECBA0",
+      "type": "expiring",
+      "severity": "warning",
+      "isDismissed": false
+    },
+    {
+      "id": "a3",
+      "medicineName": "Cetrizine 10mg",
+      "daysValue": 96,
+      "daysLabel": "96 days",
+      "description": "Opened 10 Jan 2025 · Consider discarding if efficacy is reduced",
+      "patientName": "Meena Kumar",
+      "patientInitials": "MK",
+      "patientAvatarColor": "#F48FB1",
+      "type": "opened",
+      "severity": null,
+      "isDismissed": false
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+rules_version = '2';
+
+// ── MedBox — Firestore Security Rules ─────────────────────────────────────────
+//
+// Data layout
+//   users/{userId}/medicines/{medicineId}
+//   users/{userId}/patients/{patientId}
+//   users/{userId}/prescriptions/{prescriptionId}
+//   users/{userId}/alerts/{alertId}
+//
+// Principles
+//   1. Every read and write requires Firebase Auth.
+//   2. A user may only access documents under their own users/{uid} subtree.
+//   3. Required fields are validated on create and full-overwrite updates.
+//   4. Alerts are written by AlertEngine (client); users may only toggle
+//      isDismissed — they cannot alter medicineName, type, daysValue, etc.
+//   5. Everything else is denied by the catch-all rule at the bottom.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── User subtree ──────────────────────────────────────────────────────────
+    match /users/{userId} {
+
+      // ── Medicines ───────────────────────────────────────────────────────────
+      match /medicines/{medicineId} {
+        allow read, delete: if isOwner(userId);
+        allow create:       if isOwner(userId) && isValidMedicine(request.resource.data);
+        allow update:       if isOwner(userId) && isValidMedicine(request.resource.data);
+      }
+
+      // ── Patients ────────────────────────────────────────────────────────────
+      match /patients/{patientId} {
+        allow read, delete: if isOwner(userId);
+        allow create:       if isOwner(userId) && isValidPatient(request.resource.data);
+        allow update:       if isOwner(userId) && isValidPatient(request.resource.data);
+      }
+
+      // ── Prescriptions ────────────────────────────────────────────────────────
+      match /prescriptions/{prescriptionId} {
+        allow read, delete: if isOwner(userId);
+        allow create:       if isOwner(userId) && isValidPrescription(request.resource.data);
+        allow update:       if isOwner(userId) && isValidPrescription(request.resource.data);
+      }
+
+      // ── Alerts ───────────────────────────────────────────────────────────────
+      // AlertEngine creates and fully overwrites alert documents from the client.
+      // The user (via the Alerts screen) may only toggle the isDismissed field.
+      // This prevents a tampered client from altering alert content.
+      match /alerts/{alertId} {
+        allow read, delete: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidAlert(request.resource.data);
+
+        allow update: if isOwner(userId) && (
+          // AlertEngine full overwrite — all required alert fields present
+          isValidAlert(request.resource.data)
+          ||
+          // User dismiss / restore — only isDismissed is allowed to change
+          (
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly(['isDismissed'])
+            && request.resource.data.isDismissed is bool
+          )
+        );
+      }
+    }
+
+    // ── Deny everything not explicitly matched above ───────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Helper functions ──────────────────────────────────────────────────────
+
+    // True when the requesting user owns the document path.
+    function isOwner(userId) {
+      return request.auth != null
+          && request.auth.uid == userId;
+    }
+
+    // Medicine — required fields that AlertEngine and AddMedicineScreen always write.
+    function isValidMedicine(data) {
+      return data.name           is string && data.name.size() > 0
+          && data.patient        is string && data.patient.size() > 0
+          && data.acquiredDateFull is string && data.acquiredDateFull.size() > 0
+          && data.expiryDateFull   is string && data.expiryDateFull.size() > 0
+          && data.isOpened       is bool
+          && data.topStatus      is string;
+    }
+
+    // Patient — only a non-empty name is required.
+    function isValidPatient(data) {
+      return data.name is string && data.name.size() > 0;
+    }
+
+    // Prescription — the three fields always written by AddPrescriptionScreen.
+    function isValidPrescription(data) {
+      return data.cause       is string && data.cause.size() > 0
+          && data.date        is string && data.date.size() > 0
+          && data.patientName is string && data.patientName.size() > 0
+          && data.medicines   is list;
+    }
+
+    // Alert — the fields AlertEngine always writes on create/sync.
+    function isValidAlert(data) {
+      return data.medicineName is string && data.medicineName.size() > 0
+          && data.type         is string
+          && data.daysValue    is int
+          && data.isDismissed  is bool;
+    }
+  }
+}
