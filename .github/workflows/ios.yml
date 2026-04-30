@@ -82,7 +82,7 @@ jobs:
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/medbox.mobileprovision
+            > ~/Library/MobileDevice/Provisioning\ Profiles/carermeds.mobileprovision
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build IPA
@@ -95,8 +95,8 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: medbox-${{ github.run_number }}.ipa
-          path: build/ios/ipa/medbox.ipa
+          name: carermeds-${{ github.run_number }}.ipa
+          path: build/ios/ipa/CarerMeds.ipa
           retention-days: 30
 
       # ── Cleanup keychain ─────────────────────────────────────────────────────
