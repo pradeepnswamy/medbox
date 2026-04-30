@@ -46,7 +46,7 @@ Future<void> main() async {
     () async {
       runApp(
         const ProviderScope(
-          child: MedBoxApp(),
+          child: CarerMedsApp(),
         ),
       );
     },
@@ -77,9 +77,9 @@ Future<void> _initFirebase() async {
     final current = FirebaseAuth.instance.currentUser;
     if (current != null && current.isAnonymous) {
       await FirebaseAuth.instance.signOut();
-      debugPrint('[MedBox] Cleared legacy anonymous session');
+      debugPrint('[CarerMeds] Cleared legacy anonymous session');
     }
   } catch (e) {
-    debugPrint('[MedBox] Firebase init error: $e');
+    debugPrint('[CarerMeds] Firebase init error: $e');
   }
 }

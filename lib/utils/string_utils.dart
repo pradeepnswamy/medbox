@@ -1,4 +1,4 @@
-/// Pure string helpers used across the MedBox UI.
+/// Pure string helpers used across the CarerMeds UI.
 abstract final class StringUtils {
   // ── Name helpers ────────────────────────────────────────────────────────────
 

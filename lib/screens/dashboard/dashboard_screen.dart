@@ -252,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'MedBox',
+                'CarerMeds',
                 textScaler: titleScaler,
                 style: const TextStyle(
                   fontSize: 26,

@@ -4,12 +4,12 @@ import 'config/app_router.dart';
 import 'config/app_theme.dart';
 import 'config/app_constants.dart';
 
-/// Root widget of the MedBox application.
+/// Root widget of the CarerMeds application.
 ///
 /// Wrapped by [ProviderScope] in [main.dart].
 /// Owns the [GoRouter] instance and applies the global [AppTheme].
-class MedBoxApp extends ConsumerWidget {
-  const MedBoxApp({super.key});
+class CarerMedsApp extends ConsumerWidget {
+  const CarerMedsApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

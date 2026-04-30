@@ -1,5 +1,5 @@
-name: medbox
-description: "MedBox — medicine and prescription tracker for family caregivers."
+name: carermeds
+description: "CarerMeds — medicine and prescription tracker for family caregivers."
 publish_to: 'none'
 
 version: 1.0.0+1

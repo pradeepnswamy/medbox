@@ -1,4 +1,4 @@
-# MedBox
+# CarerMeds
 
 A Flutter app for family caregivers to track medicines, prescriptions, and expiry alerts across multiple patients.
 
@@ -48,7 +48,7 @@ A Flutter app for family caregivers to track medicines, prescriptions, and expir
 
 ```bash
 git clone https://github.com/pradeepnswamy/medbox.git
-cd medbox
+cd medbox   # folder name stays as-is (the git repo folder)
 ```
 
 ### 2. Add Firebase config files

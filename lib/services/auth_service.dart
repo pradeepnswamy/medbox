@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
 
-/// Thin wrapper around [FirebaseAuth] that exposes only what MedBox needs.
+/// Thin wrapper around [FirebaseAuth] that exposes only what CarerMeds needs.
 ///
 /// All methods surface [FirebaseAuthException] directly — callers are
 /// responsible for mapping codes to user-facing messages.

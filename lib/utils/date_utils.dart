@@ -1,4 +1,4 @@
-/// Convenience wrappers for common date operations used across MedBox.
+/// Convenience wrappers for common date operations used across CarerMeds.
 /// All functions are pure (no side-effects) so they are easy to unit-test.
 abstract final class MedDateUtils {
   // ── Formatting ──────────────────────────────────────────────────────────────

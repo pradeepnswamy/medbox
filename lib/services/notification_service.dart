@@ -36,21 +36,21 @@ abstract final class NotificationService {
 
   // ── Android notification channels ──────────────────────────────────────────
   static const _chCritical = AndroidNotificationChannel(
-    'medbox_critical',
+    'carermeds_critical',
     'Critical Medicine Alerts',
     description: 'Medicines expiring within 7 days — shown daily until resolved.',
     importance: Importance.high,
   );
 
   static const _chWarning = AndroidNotificationChannel(
-    'medbox_warning',
+    'carermeds_warning',
     'Expiry Warnings',
     description: 'Medicines expiring within 30 days.',
     importance: Importance.defaultImportance,
   );
 
   static const _chOpened = AndroidNotificationChannel(
-    'medbox_opened',
+    'carermeds_opened',
     'Opened Medicine Alerts',
     description: 'Medicines that have been open longer than 3 months.',
     importance: Importance.defaultImportance,

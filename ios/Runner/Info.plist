@@ -3,17 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>MedBox needs camera access to photograph medicines and prescriptions.</string>
+	<string>CarerMeds needs camera access to photograph medicines and prescriptions.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>MedBox needs photo library access to attach medicine and prescription photos.</string>
+	<string>CarerMeds needs photo library access to attach medicine and prescription photos.</string>
 	<key>NSPhotoLibraryAddOnlyUsageDescription</key>
-	<string>MedBox needs access to save photos to your library.</string>
+	<string>CarerMeds needs access to save photos to your library.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>MedBox</string>
+	<string>CarerMeds</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -21,7 +23,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MedBox</string>
+	<string>CarerMeds</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
