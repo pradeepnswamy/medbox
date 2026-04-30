@@ -1,6 +1,6 @@
 {
-    "name": "medbox",
-    "short_name": "medbox",
+    "name": "CarerMeds",
+    "short_name": "CarerMeds",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

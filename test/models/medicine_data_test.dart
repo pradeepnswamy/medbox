@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:medbox/models/medicine.dart';
+import 'package:carermeds/models/medicine.dart';
 
 void main() {
   // ── Shared test fixture ───────────────────────────────────────────────────────
@@ -121,10 +121,10 @@ void main() {
     test('parses a non-null photoPath', () {
       final med = MedicineData.fromJson({
         ...sampleJson,
-        'photoPath': '/data/user/0/com.pradeep.medbox/files/box.jpg',
+        'photoPath': '/data/user/0/com.pradeep.carermeds/files/box.jpg',
       });
       expect(med.photoPath,
-          '/data/user/0/com.pradeep.medbox/files/box.jpg');
+          '/data/user/0/com.pradeep.carermeds/files/box.jpg');
     });
   });
 

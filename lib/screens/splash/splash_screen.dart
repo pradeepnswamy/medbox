@@ -5,7 +5,7 @@ import '../../config/app_colors.dart';
 import '../../config/app_router.dart';
 
 /// App splash screen — shown on cold start while Firebase finishes any
-/// remaining async work. Fades in the MedBox branding, then navigates to
+/// remaining async work. Fades in the CarerMeds branding, then navigates to
 /// the dashboard after a short delay.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -77,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 // ── App icon ──────────────────────────────────────────────────
                 Semantics(
-                  label: 'MedBox',
+                  label: 'CarerMeds',
                   header: true,
                   child: Container(
                     width: 88,
@@ -106,7 +106,7 @@ class _SplashScreenState extends State<SplashScreen>
                 // ── App name ──────────────────────────────────────────────────
                 ExcludeSemantics(
                   child: Text(
-                    'MedBox',
+                    'CarerMeds',
                     textScaler: splashScaler,
                     style: const TextStyle(
                       fontSize: 34,

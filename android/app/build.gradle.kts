@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.pradeep.medbox"
+    namespace = "com.pradeep.carermeds"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pradeep.medbox"
+        applicationId = "com.pradeep.carermeds"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,7 +32,7 @@ android {
     // local.properties file (never commit credentials to version control).
     signingConfigs {
         create("release") {
-            storeFile     = file("medbox.jks")
+            storeFile     = file("carermeds.jks")
             storePassword = System.getenv("ANDROID_STORE_PASSWORD") ?: ""
             keyAlias      = System.getenv("ANDROID_KEY_ALIAS")      ?: ""
             keyPassword   = System.getenv("ANDROID_KEY_PASSWORD")   ?: ""

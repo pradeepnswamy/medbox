@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
-/// Central theme configuration for MedBox.
+/// Central theme configuration for CarerMeds.
 /// Usage: `theme: AppTheme.light` in MaterialApp.
 abstract final class AppTheme {
 

@@ -3,7 +3,7 @@
 abstract final class AppConstants {
 
   // ── App identity ──────────────────────────────────────────────────────────────
-  static const String appName        = 'MedBox';
+  static const String appName        = 'CarerMeds';
   static const String appVersion     = '1.0.0';
   static const String appTagline     = 'Your family medicine manager';
 

@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:medbox/utils/image_utils.dart';
+import 'package:carermeds/utils/image_utils.dart';
 
 void main() {
   // ── readableSize ──────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ void main() {
     test('falls back to original bytes when the file contains corrupt data', () async {
       // decodeImage returns null for non-image bytes →
       // the function must return the original bytes unchanged.
-      final file = File('${Directory.systemTemp.path}/medbox_test_corrupt.bin');
+      final file = File('${Directory.systemTemp.path}/carermeds_test_corrupt.bin');
       final junkBytes = Uint8List.fromList([0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE]);
       await file.writeAsBytes(junkBytes);
 
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('falls back to original bytes when the file is empty', () async {
-      final file = File('${Directory.systemTemp.path}/medbox_test_empty.bin');
+      final file = File('${Directory.systemTemp.path}/carermeds_test_empty.bin');
       await file.writeAsBytes(Uint8List(0));
 
       try {

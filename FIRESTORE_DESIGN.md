@@ -1,8 +1,8 @@
-# MedBox — Firestore Database Design
+# CarerMeds — Firestore Database Design
 
 ## Overview
 
-MedBox uses **Cloud Firestore** with a user-scoped collection tree.
+CarerMeds uses **Cloud Firestore** with a user-scoped collection tree.
 All data lives under `users/{userId}/...` so security rules are simple
 and one user's data is never visible to another.
 
@@ -55,7 +55,7 @@ Stores account-level profile data.
 
 ### `users/{userId}/patients/{patientId}`
 
-One document per family member tracked in MedBox.
+One document per family member tracked in CarerMeds.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -333,7 +333,7 @@ Medicine photos and prescription scan images are stored in Firebase Storage
 under a parallel path:
 
 ```
-gs://medbox-app.appspot.com/
+gs://carermeds-app.appspot.com/
 └── users/
     └── {userId}/
         ├── medicines/

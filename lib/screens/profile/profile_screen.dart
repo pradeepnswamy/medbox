@@ -214,7 +214,7 @@ class ProfileScreen extends StatelessWidget {
         iconBg: AppColors.primaryLight,
         icon: Icons.medication_rounded,
         iconColor: _kGreen,
-        title: 'MedBox',
+        title: 'CarerMeds',
         trailing: 'Version 1.0.0',
       ),
       _divider(),

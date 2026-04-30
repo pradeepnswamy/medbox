@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(width: 12),
         const Text(
-          'MedBox',
+          'CarerMeds',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -297,7 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'New to MedBox? ',
+            'New to CarerMeds? ',
             style: TextStyle(fontSize: 14, color: _kGrey),
           ),
           GestureDetector(
