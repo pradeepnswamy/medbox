@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -27,16 +31,37 @@ Future<void> main() async {
   // AlertEngine.sync() fires shortly after the first authenticated screen loads.
   await NotificationService.init();
 
-  runApp(
-    const ProviderScope(
-      child: MedBoxApp(),
-    ),
+  // ── Crashlytics error hooks ──────────────────────────────────────────────
+  // 1. Flutter framework errors (widget build failures, etc.)
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  // 2. Uncaught async errors outside Flutter's zone (isolate, Future, Stream)
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
+  // Wrap runApp in a guarded zone so synchronous errors are also caught.
+  await runZonedGuarded(
+    () async {
+      runApp(
+        const ProviderScope(
+          child: MedBoxApp(),
+        ),
+      );
+    },
+    (error, stack) =>
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false),
   );
 }
 
 Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp();
+
+    // Disable Crashlytics in debug builds — only report real crashes.
+    await FirebaseCrashlytics.instance
+        .setCrashlyticsCollectionEnabled(!kDebugMode);
 
     // Enable offline persistence — the app stays usable without internet.
     // Any writes are queued locally and synced when connectivity returns.
