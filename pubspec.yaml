@@ -40,7 +40,7 @@ dependencies:
   # ── Local notifications ────────────────────────────────────────────────────────
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
-  flutter_timezone: ^1.0.8
+  flutter_timezone: ^5.0.2
 
   # ── Connectivity ──────────────────────────────────────────────────────────────
   connectivity_plus: ^6.1.4
