@@ -34,7 +34,7 @@ dependencies:
   firebase_crashlytics: ^4.3.3
 
   # ── Media ─────────────────────────────────────────────────────────────────────
-  image_picker: ^1.1.2
+  image_picker: ^1.2.2
   image: ^4.3.0
 
   # ── Local notifications ────────────────────────────────────────────────────────
