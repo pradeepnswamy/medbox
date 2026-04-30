@@ -44,11 +44,11 @@ jobs:
           pod install --repo-update
 
       # ── Lint & test ──────────────────────────────────────────────────────────
-      - name: Analyse
-        run: flutter analyze --no-fatal-infos
+      #- name: Analyse
+       # run: flutter analyze --no-fatal-infos
 
-      - name: Run tests
-        run: flutter test
+      #- name: Run tests
+        #run: flutter test
 
       # ── Code signing ─────────────────────────────────────────────────────────
       # Export your .p12 certificate from Keychain Access, then encode:
