@@ -82,7 +82,7 @@ jobs:
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/carermeds.mobileprovision
+            > ~/Library/MobileDevice/Provisioning\ Profiles/MedBox.mobileprovision
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build IPA
