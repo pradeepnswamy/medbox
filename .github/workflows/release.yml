@@ -10,7 +10,7 @@ jobs:
     name: Build Android App Bundle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: subosito/flutter-action@v2
         with:
@@ -45,7 +45,7 @@ jobs:
     name: Build iOS IPA
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: subosito/flutter-action@v2
         with:
@@ -94,7 +94,7 @@ jobs:
     needs: [build-android, build-ios]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download Android artifact
         uses: actions/download-artifact@v4
