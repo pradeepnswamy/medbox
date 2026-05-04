@@ -81,13 +81,53 @@ jobs:
 
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/MedBox.mobileprovision
           echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/MedBox.mobileprovision
+            > "$PROFILE_PATH"
+
+          # Extract UUID from the installed profile and save to GITHUB_ENV
+          PROFILE_UUID=$(security cms -D -i "$PROFILE_PATH" \
+            | awk '/<key>UUID<\/key>/{getline; print}' \
+            | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "Provisioning profile UUID: $PROFILE_UUID"
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build IPA
         run: |
+          # Generate ExportOptions.plist with the actual profile UUID
+          cat > ios/ExportOptions.plist << EXPORT_EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>Q3TX4NHZSX</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>iPhone Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.pradeep.medbox</key>
+              <string>${{ env.PROFILE_UUID }}</string>
+            </dict>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>destination</key>
+            <string>export</string>
+          </dict>
+          </plist>
+          EXPORT_EOF
+
           flutter build ipa --release \
+            --export-options-plist ios/ExportOptions.plist \
             --dart-define=FLUTTER_BUILD_NAME=1.0.0 \
             --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }}
 
@@ -96,7 +136,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: carermeds-${{ github.run_number }}.ipa
-          path: build/ios/ipa/CarerMeds.ipa
+          path: build/ios/ipa/*.ipa
           retention-days: 30
 
       # ── Cleanup keychain ─────────────────────────────────────────────────────
