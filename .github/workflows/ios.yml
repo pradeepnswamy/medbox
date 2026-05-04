@@ -10,12 +10,21 @@ on:
 jobs:
   build:
     name: Build iOS IPA
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       # ── Checkout ────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ── Xcode ───────────────────────────────────────────────────────────────
+      # Select the newest available Xcode (must be Xcode 26+ for iOS 26 SDK)
+      - name: Select latest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using Xcode: $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       # ── Flutter ─────────────────────────────────────────────────────────────
       - name: Set up Flutter
