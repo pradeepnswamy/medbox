@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../config/app_colors.dart';
+import '../screens/dashboard/dashboard_screen.dart';
 
 /// Persistent bottom-navigation shell used by [StatefulShellRoute].
 ///
@@ -67,6 +68,15 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
   void _onTap(int visualIndex) {
     final branch = _branchForVisual[visualIndex];
     _controllers[visualIndex].forward(from: 0);
+
+    // When switching TO the dashboard (branch 0) from a different tab,
+    // trigger a data reload so newly added medicines / patients / prescriptions
+    // are reflected immediately.  StatefulShellRoute keeps widget state alive,
+    // so initState() only runs once — the callback bridges that gap.
+    if (branch == 0 && branch != _currentBranch) {
+      DashboardScreen.onBranchActivated?.call();
+    }
+
     widget.navigationShell.goBranch(
       branch,
       initialLocation: branch == _currentBranch,

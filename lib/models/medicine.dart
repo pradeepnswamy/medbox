@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 
 // ── BadgeStyle ────────────────────────────────────────────────────────────────
-// Moved here from lib/screens/medicines/components/badge_chip.dart so that
-// MedicineData can reference it without creating a model→screen dependency.
-// badge_chip.dart now re-exports this enum.
 
 enum BadgeStyle {
   available,    // green
@@ -18,9 +15,11 @@ enum BadgeStyle {
 class MedicineData {
   final String id;
   final String name;
-  final String patient;
-  final String patientInitials;
-  final Color patientAvatarColor;
+
+  /// ID of the [PatientData] this medicine belongs to.
+  /// Null for OTC / family-shared medicines with no specific patient.
+  final String? patientId;
+
   final String acquiredDate;
   final String acquiredDateFull;
   final String expiryLabel;
@@ -40,8 +39,7 @@ class MedicineData {
   final String topStatus;
 
   /// Raw timestamps (milliseconds since epoch) stored in Firestore for
-  /// precise alert computation. Null for medicines saved before this field
-  /// was introduced — AlertEngine falls back to parsing string fields.
+  /// precise alert computation.
   final int? expiryTimestamp;
   final int? openedTimestamp;
 
@@ -52,9 +50,7 @@ class MedicineData {
   const MedicineData({
     required this.id,
     required this.name,
-    required this.patient,
-    required this.patientInitials,
-    required this.patientAvatarColor,
+    this.patientId,
     required this.acquiredDate,
     required this.acquiredDateFull,
     required this.expiryLabel,
@@ -76,13 +72,10 @@ class MedicineData {
     this.photoPath,
   });
 
-  /// Returns a copy of this medicine with the given fields replaced.
   MedicineData copyWith({
     String? id,
     String? name,
-    String? patient,
-    String? patientInitials,
-    Color? patientAvatarColor,
+    Object? patientId = _sentinel,
     String? acquiredDate,
     String? acquiredDateFull,
     String? expiryLabel,
@@ -101,14 +94,14 @@ class MedicineData {
     String? topStatus,
     int? expiryTimestamp,
     int? openedTimestamp,
-    Object? photoPath = _sentinel,  // use sentinel so null can be passed explicitly
+    Object? photoPath = _sentinel,
   }) {
     return MedicineData(
       id:                    id ?? this.id,
       name:                  name ?? this.name,
-      patient:               patient ?? this.patient,
-      patientInitials:       patientInitials ?? this.patientInitials,
-      patientAvatarColor:    patientAvatarColor ?? this.patientAvatarColor,
+      patientId:             identical(patientId, _sentinel)
+                                 ? this.patientId
+                                 : patientId as String?,
       acquiredDate:          acquiredDate ?? this.acquiredDate,
       acquiredDateFull:      acquiredDateFull ?? this.acquiredDateFull,
       expiryLabel:           expiryLabel ?? this.expiryLabel,
@@ -136,8 +129,6 @@ class MedicineData {
   static const Object _sentinel = Object();
 
   // ── Firestore / JSON deserialization ──────────────────────────────────────
-  // Field names use camelCase to match Firestore documents natively.
-  // The local JSON asset files also use camelCase for consistency.
 
   factory MedicineData.fromJson(Map<String, dynamic> json) {
     final rawBadges = json['badges'] as List<dynamic>;
@@ -149,9 +140,7 @@ class MedicineData {
     return MedicineData(
       id:                    json['id'] as String,
       name:                  json['name'] as String,
-      patient:               json['patient'] as String,
-      patientInitials:       json['patientInitials'] as String,
-      patientAvatarColor:    _parseColor(json['patientAvatarColor'] as String),
+      patientId:             json['patientId'] as String?,
       acquiredDate:          json['acquiredDate'] as String,
       acquiredDateFull:      json['acquiredDateFull'] as String,
       expiryLabel:           json['expiryLabel'] as String,
@@ -176,13 +165,11 @@ class MedicineData {
     );
   }
 
-  // ── toFirestore — call when saving / updating a medicine ──────────────────
+  // ── toFirestore ───────────────────────────────────────────────────────────
 
   Map<String, dynamic> toFirestore() => {
     'name':                  name,
-    'patient':               patient,
-    'patientInitials':       patientInitials,
-    'patientAvatarColor':    '#${patientAvatarColor.value.toRadixString(16).substring(2).toUpperCase()}',
+    'patientId':             patientId,
     'acquiredDate':          acquiredDate,
     'acquiredDateFull':      acquiredDateFull,
     'expiryLabel':           expiryLabel,

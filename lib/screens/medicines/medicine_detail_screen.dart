@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../config/app_colors.dart';
 import '../../config/app_router.dart';
 import '../../models/medicine.dart';
+import '../../models/patient.dart';
 import '../../services/data_service.dart';
 import '../../utils/image_utils.dart';
 import '../../widgets/forms/image_picker_widget.dart';
@@ -34,11 +35,22 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
   String? _photoPath;
   bool _photoSaving = false;
 
+  /// Resolved patient — null when medicine has no patientId or patient not found.
+  PatientData? _patient;
+
   @override
   void initState() {
     super.initState();
     _isOpened = widget.medicine.isOpened;
     _photoPath = widget.medicine.photoPath;
+    _loadPatient();
+  }
+
+  Future<void> _loadPatient() async {
+    final pid = widget.medicine.patientId;
+    if (pid == null || pid.isEmpty) return;
+    final p = await DataService.instance.getPatient(pid);
+    if (mounted && p != null) setState(() => _patient = p);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -498,108 +510,121 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
     );
   }
 
-  /// 5-row info table: Patient, Form, Dosage, Quantity, Notes.
+  /// Info table: Patient (if any), Form, Dosage, Quantity, Notes.
   Widget _buildInfoTable(MedicineData med) {
-    final rows = [
-      ('Patient', null, med.patient, med.patientInitials, med.patientAvatarColor),
-      ('Form', null, med.form, null, null),
-      ('Dosage', null, med.dosage, null, null),
-      ('Quantity', null, med.quantity, null, null),
-      ('Notes', null, med.notes, null, null),
-    ];
-
     return Container(
       decoration: BoxDecoration(
         color: _kCard,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
-        children: List.generate(rows.length, (i) {
-          final r = rows[i];
-          final label = r.$1 as String;
-          final value = r.$3 as String;
-          final initials = r.$4 as String?;
-          final avatarColor = r.$5 as Color?;
-          final isLast = i == rows.length - 1;
+        children: [
+          // ── Patient row — shown only when a patient is linked ──────────────
+          if (med.patientId != null) ...[
+            _buildPatientRow(),
+            _divider(),
+          ],
 
-          return Column(
+          // ── Static text rows ───────────────────────────────────────────────
+          ..._buildTextRows([
+            ('Form',     med.form),
+            ('Dosage',   med.dosage),
+            ('Quantity', med.quantity),
+            ('Notes',    med.notes),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTextRows(List<(String, String)> rows) {
+    final widgets = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      final label  = rows[i].$1;
+      final value  = rows[i].$2;
+      final isLast = i == rows.length - 1;
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 90,
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: _kLabel,
-                        ),
-                      ),
-                    ),
-                    // Patient row: avatar + name
-                    if (initials != null && avatarColor != null)
-                      Row(
-                        children: [
-                          Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: avatarColor,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            value,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Expanded(
-                        child: Text(
-                          value,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
+              SizedBox(
+                width: 90,
+                child: Text(label,
+                    style: const TextStyle(fontSize: 13, color: _kLabel)),
+              ),
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-              if (!isLast)
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: AppColors.border,
-                  indent: 16,
-                  endIndent: 16,
-                ),
             ],
-          );
-        }),
+          ),
+        ),
+      );
+      if (!isLast) widgets.add(_divider());
+    }
+    return widgets;
+  }
+
+  /// Tappable patient row — navigates to PatientDetailScreen when resolved.
+  Widget _buildPatientRow() {
+    final patient = _patient;
+    return GestureDetector(
+      onTap: patient != null
+          ? () => context.push(AppRoutes.patientDetail, extra: patient)
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 90,
+              child: Text('Patient',
+                  style: TextStyle(fontSize: 13, color: _kLabel)),
+            ),
+            if (patient == null)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 1.5, color: _kGreen),
+              )
+            else ...[
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: patient.avatarColor.withOpacity(0.2),
+                child: Text(
+                  patient.initials,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: patient.avatarColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  patient.name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 16, color: _kLabel),
+            ],
+          ],
+        ),
       ),
     );
   }

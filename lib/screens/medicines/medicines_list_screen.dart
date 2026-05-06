@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../config/app_colors.dart';
 import '../../config/app_router.dart';
 import '../../models/medicine.dart';
+import '../../models/patient.dart';
 import '../../services/data_service.dart';
 import '../../widgets/offline_retry_widget.dart';
 import 'components/badge_chip.dart';
@@ -24,40 +25,27 @@ class MedicinesListScreen extends StatefulWidget {
 
 class _MedicinesListScreenState extends State<MedicinesListScreen> {
   // ── Async data ────────────────────────────────────────────────────────────
-  List<MedicineData>? _medicines; // null = still loading
+  List<MedicineData>?     _medicines; // null = still loading
+  Map<String, PatientData> _patientMap = {};
   String? _error;
 
   // ── Sort / filter / search ────────────────────────────────────────────────
   int    _selectedSort = 0;
-  String _filterKey    = 'all';   // 'all' | 'expiring' | 'opened' | 'patient:<name>'
+  String _filterKey    = 'all';   // 'all' | 'expiring' | 'opened'
   final _searchController = TextEditingController();
 
-  final List<String> _sortOptions = ['Date added', 'Expiry', 'Patient', 'Name A–Z'];
+  final List<String> _sortOptions = ['Date added', 'Expiry', 'Name A–Z'];
 
   /// Filter chips derived live from loaded medicines.
-  /// Each chip is (display label, accent color, filter key).
   List<(String, Color, String)> get _filterChips {
     final all      = _medicines ?? [];
     final expiring = all.where((m) => m.topStatus == 'Expiring').length;
     final opened   = all.where((m) => m.topStatus == 'Opened').length;
 
-    final seen         = <String>{};
-    final patientChips = <(String, Color, String)>[];
-    for (final m in all) {
-      if (seen.add(m.patient)) {
-        patientChips.add((
-          m.patient.split(' ').first,   // "Ravi", "Meena", …
-          m.patientAvatarColor,
-          'patient:${m.patient}',
-        ));
-      }
-    }
-
     return [
       ('All (${all.length})', _kGreen, 'all'),
       if (expiring > 0) ('Expiring ($expiring)', AppColors.danger, 'expiring'),
       if (opened   > 0) ('Opened ($opened)',     AppColors.warning, 'opened'),
-      ...patientChips,
     ];
   }
 
@@ -70,8 +58,19 @@ class _MedicinesListScreenState extends State<MedicinesListScreen> {
   Future<void> _reload() async {
     if (mounted) setState(() { _error = null; _medicines = null; });
     try {
-      final list = await DataService.instance.getMedicines();
-      if (mounted) setState(() => _medicines = list);
+      // Load medicines and patients in parallel for speed
+      final results = await Future.wait([
+        DataService.instance.getMedicines(),
+        DataService.instance.getPatients(),
+      ]);
+      final medicines = results[0] as List<MedicineData>;
+      final patients  = results[1] as List<PatientData>;
+      if (mounted) {
+        setState(() {
+          _medicines  = medicines;
+          _patientMap = {for (final p in patients) p.id: p};
+        });
+      }
     } catch (_) {
       if (mounted) setState(() {
         _medicines = [];
@@ -96,19 +95,12 @@ class _MedicinesListScreenState extends State<MedicinesListScreen> {
       list = list.where((m) => m.topStatus == 'Expiring').toList();
     } else if (_filterKey == 'opened') {
       list = list.where((m) => m.topStatus == 'Opened').toList();
-    } else if (_filterKey.startsWith('patient:')) {
-      final name = _filterKey.substring(8);
-      list = list.where((m) => m.patient == name).toList();
     }
 
     // Search
     final q = _searchController.text.toLowerCase().trim();
     if (q.isNotEmpty) {
-      list = list
-          .where((m) =>
-              m.name.toLowerCase().contains(q) ||
-              m.patient.toLowerCase().contains(q))
-          .toList();
+      list = list.where((m) => m.name.toLowerCase().contains(q)).toList();
     }
 
     // Sort
@@ -116,10 +108,7 @@ class _MedicinesListScreenState extends State<MedicinesListScreen> {
       case 1: // Expiry
         list.sort((a, b) => a.expiryLabel.compareTo(b.expiryLabel));
         break;
-      case 2: // Patient A–Z
-        list.sort((a, b) => a.patient.compareTo(b.patient));
-        break;
-      case 3: // Name A–Z
+      case 2: // Name A–Z
         list.sort((a, b) => a.name.compareTo(b.name));
         break;
       default: // Date added — preserve original order
@@ -261,7 +250,7 @@ class _MedicinesListScreenState extends State<MedicinesListScreen> {
               onChanged: (_) => setState(() {}),
               style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
               decoration: const InputDecoration(
-                hintText: 'Search medicines, patients...',
+                hintText: 'Search medicines...',
                 hintStyle:
                     TextStyle(color: AppColors.textSecondary, fontSize: 14),
                 border: InputBorder.none,
@@ -471,18 +460,84 @@ class _MedicinesListScreenState extends State<MedicinesListScreen> {
   }
 
   Widget _buildCard(MedicineData med) {
-    return MedicineListCard(
-      name: med.name,
-      patient: med.patient,
-      acquiredDate: med.acquiredDate,
-      expiryLabel: med.expiryLabel,
-      expiryColor: med.expiryColor,
-      badges: med.badges,
-      attentionColor: med.attentionColor,
-      onTap: () async {
-        await context.push(AppRoutes.medicineDetail, extra: med);
+    final patientName = med.patientId != null
+        ? _patientMap[med.patientId]?.name
+        : null;
+    return Dismissible(
+      key: ValueKey(med.id),
+      direction: DismissDirection.endToStart,
+      background: const SizedBox.shrink(),
+      secondaryBackground: _deleteBg(),
+      confirmDismiss: (_) => _confirmDelete(
+        title: med.name,
+        message: 'Delete this medicine from the cabinet? This cannot be undone.',
+      ),
+      onDismissed: (_) async {
+        await DataService.instance.deleteMedicine(med.id, photoPath: med.photoPath);
         _reload();
       },
+      child: MedicineListCard(
+        name:           med.name,
+        patientName:    patientName,
+        acquiredDate:   med.acquiredDate,
+        expiryLabel:    med.expiryLabel,
+        expiryColor:    med.expiryColor,
+        badges:         med.badges,
+        attentionColor: med.attentionColor,
+        onTap: () async {
+          await context.push(AppRoutes.medicineDetail, extra: med);
+          _reload();
+        },
+      ),
+    );
+  }
+
+  // ── Shared swipe-delete helpers ────────────────────────────────────────────
+
+  Widget _deleteBg() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      child: const Icon(Icons.delete_outline_rounded,
+          color: Colors.white, size: 22),
+    );
+  }
+
+  Future<bool?> _confirmDelete({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dlg) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title,
+            style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary)),
+        content: Text(message,
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dlg).pop(false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dlg).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: AppColors.danger, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 }

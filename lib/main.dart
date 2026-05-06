@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -35,23 +33,19 @@ Future<void> main() async {
   // 1. Flutter framework errors (widget build failures, etc.)
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  // 2. Uncaught async errors outside Flutter's zone (isolate, Future, Stream)
+  // 2. Uncaught async / platform errors (Futures, Streams, isolate errors).
+  //    PlatformDispatcher covers everything runZonedGuarded used to handle,
+  //    and avoids the zone-mismatch assertion that occurs when ensureInitialized()
+  //    and runApp() are called in different zones.
   PlatformDispatcher.instance.onError = (error, stack) {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
 
-  // Wrap runApp in a guarded zone so synchronous errors are also caught.
-  await runZonedGuarded(
-    () async {
-      runApp(
-        const ProviderScope(
-          child: CarerMedsApp(),
-        ),
-      );
-    },
-    (error, stack) =>
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false),
+  runApp(
+    const ProviderScope(
+      child: CarerMedsApp(),
+    ),
   );
 }
 

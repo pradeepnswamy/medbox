@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../config/app_colors.dart';
+import '../../config/app_router.dart';
 import '../../models/medicine.dart';
+import '../../models/patient.dart';
 import '../../services/data_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/image_utils.dart';
@@ -21,10 +23,12 @@ class AddMedicineScreen extends StatefulWidget {
   /// Pass an existing medicine to open the screen in edit mode.
   /// Leave null to open in add mode.
   final MedicineData? existing;
-  /// Pre-fill the patient field when navigating from a patient detail screen.
-  final String? initialPatient;
 
-  const AddMedicineScreen({super.key, this.existing, this.initialPatient});
+  /// Pre-selects a patient when opening in add mode.
+  /// Ignored when [existing] is non-null (edit mode uses med.patientId).
+  final String? initialPatientId;
+
+  const AddMedicineScreen({super.key, this.existing, this.initialPatientId});
 
   @override
   State<AddMedicineScreen> createState() => _AddMedicineScreenState();
@@ -37,7 +41,12 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
   bool   _isSaving     = false;
   XFile? _pickedImage;
 
-  final _patientCtrl   = TextEditingController();
+  /// The patient this medicine belongs to. Null = OTC / no patient.
+  String? _selectedPatientId;
+
+  /// All patients loaded from Firestore for the picker.
+  List<PatientData> _allPatients = [];
+
   final _nameCtrl      = TextEditingController();
   final _dosageCtrl    = TextEditingController();
   final _quantityCtrl  = TextEditingController();
@@ -48,31 +57,24 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
 
   static const _forms = ['Tablet', 'Capsule', 'Syrup', 'Drops', 'Injection'];
 
-  // Existing patients loaded from Firestore for quick-select chips
-  List<MedicineData>? _existingMedicines;
-
-  List<String> get _knownPatients {
-    final seen = <String>{};
-    final names = <String>[];
-    for (final m in _existingMedicines ?? []) {
-      if (seen.add(m.patient)) names.add(m.patient);
-    }
-    return names;
-  }
-
   bool get _isEditMode => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
-    DataService.instance.getMedicines().then((list) {
-      if (mounted) setState(() => _existingMedicines = list);
-    });
     _prefillIfEditing();
-    // Pre-fill patient when navigating from patient detail screen.
-    if (widget.initialPatient != null && !_isEditMode) {
-      _patientCtrl.text = widget.initialPatient!;
+    // Pre-select patient from parameter (add-mode only; edit-mode reads from med)
+    if (!_isEditMode && widget.initialPatientId != null) {
+      _selectedPatientId = widget.initialPatientId;
     }
+    DataService.instance.getPatients().then((list) {
+      if (mounted) setState(() => _allPatients = list);
+    });
+  }
+
+  Future<void> _refreshPatients() async {
+    final list = await DataService.instance.getPatients();
+    if (mounted) setState(() => _allPatients = list);
   }
 
   /// Pre-fills all form fields from [widget.existing] when in edit mode.
@@ -80,7 +82,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
     final med = widget.existing;
     if (med == null) return;
 
-    _patientCtrl.text  = med.patient;
+    _selectedPatientId = med.patientId;
     _nameCtrl.text     = med.name;
     _dosageCtrl.text   = med.dosage;
     _quantityCtrl.text = med.quantity;
@@ -149,7 +151,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
 
   @override
   void dispose() {
-    _patientCtrl.dispose();
     _nameCtrl.dispose();
     _dosageCtrl.dispose();
     _quantityCtrl.dispose();
@@ -185,7 +186,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                     const SizedBox(height: 24),
                     _buildSectionLabel('PATIENT'),
                     const SizedBox(height: 10),
-                    _buildPatientSection(),
+                    _buildPatientPicker(),
                     const SizedBox(height: 24),
                     _buildSectionLabel('MEDICINE DETAILS'),
                     const SizedBox(height: 12),
@@ -364,90 +365,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  // ── Patient section — text field + quick-select from existing patients ────────
-
-  Widget _buildPatientSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Free-text field
-        Container(
-          decoration: BoxDecoration(
-            color: _kCard,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _kBorder),
-          ),
-          child: TextField(
-            controller: _patientCtrl,
-            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              hintText: 'Enter patient name',
-              hintStyle: TextStyle(color: Color(0xFFAFADA6), fontSize: 14),
-              border: InputBorder.none,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              prefixIcon: Icon(Icons.person_outline_rounded,
-                  color: Color(0xFFAFADA6), size: 20),
-            ),
-          ),
-        ),
-
-        // Quick-select chips from existing patients in Firestore
-        if (_knownPatients.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _knownPatients.map((name) {
-                final initials = _initials(name);
-                final color    = _avatarColor(name);
-                final selected = _patientCtrl.text.trim() == name;
-                return GestureDetector(
-                  onTap: () => setState(() => _patientCtrl.text = name),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 10),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? color.withOpacity(0.15)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: selected ? color : AppColors.border,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: color,
-                          child: Text(initials,
-                              style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                        ),
-                        const SizedBox(width: 7),
-                        Text(name.split(' ').first,
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    selected ? color : AppColors.textPrimary)),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -767,23 +684,11 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
       }
       if (!_isOpened) badges.add(('Unopened', BadgeStyle.neutral));
 
-      // ── Patient ────────────────────────────────────────────────────────────
-      final patientName = _patientCtrl.text.trim();
-      if (patientName.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a patient name')),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-
       // ── Build + save ───────────────────────────────────────────────────────
       final med = MedicineData(
-        id:                   _isEditMode ? widget.existing!.id : '',
-        name:                 name,
-        patient:              patientName,
-        patientInitials:      _initials(patientName),
-        patientAvatarColor:   _avatarColor(patientName),
+        id:        _isEditMode ? widget.existing!.id : '',
+        name:      name,
+        patientId: _selectedPatientId,
         acquiredDate:         acquiredDate,
         acquiredDateFull:     acquiredDateFull,
         expiryLabel:          expiryLabel,
@@ -860,20 +765,125 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
     return MedDateUtils.formatMonthYear(d);
   }
 
-  // ── Patient helpers ───────────────────────────────────────────────────────────
 
-  /// "John Kumar" → "JK", "John" → "J"
-  static String _initials(String name) {
-    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
-    if (parts.length >= 2) return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-    if (parts.isNotEmpty) return parts.first[0].toUpperCase();
-    return '?';
+  // ── Patient picker ────────────────────────────────────────────────────────────
+
+  Widget _buildPatientPicker() {
+    if (_allPatients.isEmpty) {
+      // Still loading or genuinely empty
+      return GestureDetector(
+        onTap: _goAddPatient,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            color: _kCard,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _kBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.person_add_alt_1_rounded, color: _kGreen, size: 18),
+              const SizedBox(width: 10),
+              const Text(
+                'Add a patient first',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        // One chip per patient
+        ..._allPatients.map((p) {
+          final selected = _selectedPatientId == p.id;
+          return GestureDetector(
+            onTap: () => setState(() {
+              _selectedPatientId = selected ? null : p.id;
+            }),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? _kGreen : _kCard,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: selected ? _kGreen : _kBorder,
+                  width: selected ? 0 : 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: selected
+                        ? Colors.white.withOpacity(0.25)
+                        : p.avatarColor.withOpacity(0.2),
+                    child: Text(
+                      p.initials,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: selected ? Colors.white : p.avatarColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    p.name.split(' ').first,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+
+        // "Add patient" chip
+        GestureDetector(
+          onTap: _goAddPatient,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _kCard,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _kBorder, style: BorderStyle.solid),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, color: _kGreen, size: 16),
+                const SizedBox(width: 5),
+                Text(
+                  'Add patient',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _kGreen,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
-  /// Deterministic color from the patient name (cycles through a teal-to-purple palette).
-  static const _palette = AppColors.avatarPalette;
-  static Color _avatarColor(String name) =>
-      _palette[name.hashCode.abs() % _palette.length];
+  Future<void> _goAddPatient() async {
+    await context.push(AppRoutes.patientsAdd);
+    await _refreshPatients();
+  }
 
   Widget _buildSectionLabel(String label) {
     return Text(

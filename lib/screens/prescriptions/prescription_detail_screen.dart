@@ -25,7 +25,14 @@ class PrescriptionDetailScreen extends StatefulWidget {
 
 class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
 
-  PrescriptionData get _rx => widget.prescription;
+  /// Local mutable copy so medicine removals are reflected immediately.
+  late PrescriptionData _rx;
+
+  @override
+  void initState() {
+    super.initState();
+    _rx = widget.prescription;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +91,17 @@ class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
                 ),
               ),
               GestureDetector(
-                onTap: () => context.push(AppRoutes.prescriptionsAdd, extra: widget.prescription),
+                onTap: () async {
+                await context.push(AppRoutes.prescriptionsAdd, extra: _rx);
+                if (!mounted) return;
+                // Refresh local copy so MEDICINES count is up to date
+                final list = await DataService.instance.getPrescriptions();
+                final updated = list.firstWhere(
+                  (p) => p.id == _rx.id,
+                  orElse: () => _rx,
+                );
+                if (mounted) setState(() => _rx = updated);
+              },
                 child: const Text(
                   'Edit',
                   style: TextStyle(fontSize: 14, color: _kGreen, fontWeight: FontWeight.w500),
@@ -196,19 +213,13 @@ class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
       color: AppColors.border, indent: 16, endIndent: 16);
 
   Widget _buildMedicinesHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text('MEDICINES (${_rx.medicines.length})',
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                letterSpacing: 1.2, color: _kGrey)),
-        GestureDetector(
-          onTap: () => ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('Add medicine to prescription'))),
-          child: const Text('Add medicine',
-              style: TextStyle(fontSize: 12, color: _kGreen, fontWeight: FontWeight.w600)),
-        ),
-      ],
+    return Text(
+      'MEDICINES (${_rx.medicines.length})',
+      style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+          color: _kGrey),
     );
   }
 
@@ -240,9 +251,7 @@ class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
             final mockMed = MedicineData(
               id: '',
               name: med.name,
-              patient: _rx.patientName,
-              patientInitials: _rx.patientInitials,
-              patientAvatarColor: _rx.patientAvatarColor,
+              patientId: null,
               acquiredDate: 'Got ${_rx.date}',
               acquiredDateFull: _rx.dateFull,
               expiryLabel: med.expiryLabel,
@@ -266,7 +275,8 @@ class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(color: _kCard, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: _kCard, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 Container(
@@ -275,23 +285,30 @@ class _PrescriptionDetailScreenState extends State<PrescriptionDetailScreen> {
                     color: iconColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.medication_rounded, color: iconColor, size: 20),
+                  child: Icon(Icons.medication_rounded,
+                      color: iconColor, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(med.name, style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      Text(med.name,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 3),
-                      Text(med.dosage, style: const TextStyle(fontSize: 12, color: _kGrey)),
+                      Text(med.dosage,
+                          style: const TextStyle(
+                              fontSize: 12, color: _kGrey)),
                     ],
                   ),
                 ),
                 BadgeChip(label: statusLabel, style: badgeStyle),
                 const SizedBox(width: 6),
-                const Icon(Icons.chevron_right_rounded, color: _kGrey, size: 18),
+                const Icon(Icons.chevron_right_rounded,
+                    color: _kGrey, size: 18),
               ],
             ),
           ),
