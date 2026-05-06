@@ -17,7 +17,8 @@ enum MedicineStatus { available, opened, expiring }
 ///   )
 class MedicineTile extends StatelessWidget {
   final String name;
-  final String patient;
+  /// Optional patient name. Null for OTC / shared medicines.
+  final String? patientName;
   final String acquiredDate;
   final MedicineStatus status;
   final String expiryDate;
@@ -26,7 +27,7 @@ class MedicineTile extends StatelessWidget {
   const MedicineTile({
     super.key,
     required this.name,
-    required this.patient,
+    this.patientName,
     required this.acquiredDate,
     required this.status,
     required this.expiryDate,
@@ -108,7 +109,9 @@ class MedicineTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '$patient · $acquiredDate',
+                    patientName != null
+                        ? '$patientName · $acquiredDate'
+                        : acquiredDate,
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,

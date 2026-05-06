@@ -202,19 +202,63 @@ class _PrescriptionsListScreenState extends State<PrescriptionsListScreen> {
                                         ),
                                         // Cards for this year
                                         ...prescriptions.map(
-                                          (p) => PrescriptionListCard(
-                                            cause: p.cause,
-                                            date: p.date,
-                                            hospital: p.hospital,
-                                            doctor: p.doctor,
-                                            patientName: p.patientName,
-                                            patientInitials: p.patientInitials,
-                                            patientAvatarColor: p.patientAvatarColor,
-                                            medicineCount: p.medicines.length,
-                                            onTap: () async {
-                                              await context.push(AppRoutes.prescriptionDetail, extra: p);
+                                          (p) => Dismissible(
+                                            key: ValueKey(p.id),
+                                            direction: DismissDirection.endToStart,
+                                            background: const SizedBox.shrink(),
+                                            secondaryBackground: _deleteBg(),
+                                            confirmDismiss: (_) => showDialog<bool>(
+                                              context: context,
+                                              builder: (dlg) => AlertDialog(
+                                                backgroundColor: AppColors.card,
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(16)),
+                                                title: Text(p.cause,
+                                                    style: const TextStyle(
+                                                        fontSize: 17,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: AppColors.textPrimary)),
+                                                content: const Text(
+                                                  'Delete this prescription? This cannot be undone.',
+                                                  style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: AppColors.textSecondary),
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(dlg).pop(false),
+                                                    child: const Text('Cancel',
+                                                        style: TextStyle(
+                                                            color: AppColors.textSecondary)),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(dlg).pop(true),
+                                                    child: const Text('Delete',
+                                                        style: TextStyle(
+                                                            color: AppColors.danger,
+                                                            fontWeight: FontWeight.bold)),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            onDismissed: (_) async {
+                                              await DataService.instance.deletePrescription(p.id);
                                               _reload();
                                             },
+                                            child: PrescriptionListCard(
+                                              cause: p.cause,
+                                              date: p.date,
+                                              hospital: p.hospital,
+                                              doctor: p.doctor,
+                                              patientName: p.patientName,
+                                              patientInitials: p.patientInitials,
+                                              patientAvatarColor: p.patientAvatarColor,
+                                              medicineCount: p.medicines.length,
+                                              onTap: () async {
+                                                await context.push(AppRoutes.prescriptionDetail, extra: p);
+                                                _reload();
+                                              },
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -240,6 +284,22 @@ class _PrescriptionsListScreenState extends State<PrescriptionsListScreen> {
         child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
 
+    );
+  }
+
+  // ── Swipe-delete background ───────────────────────────────────────────────────
+
+  Widget _deleteBg() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      child: const Icon(Icons.delete_outline_rounded,
+          color: Colors.white, size: 22),
     );
   }
 

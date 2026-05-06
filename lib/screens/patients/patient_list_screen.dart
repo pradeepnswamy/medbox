@@ -19,7 +19,6 @@ class PatientListScreen extends StatefulWidget {
 }
 
 class _PatientListScreenState extends State<PatientListScreen> {
-  // Null while loading; populated from both Firestore patients + medicine data.
   List<PatientData>? _patients;
   String? _error;
   final _searchCtrl = TextEditingController();
@@ -33,22 +32,8 @@ class _PatientListScreenState extends State<PatientListScreen> {
   Future<void> _reload() async {
     if (mounted) setState(() { _error = null; _patients = null; });
     try {
-      // Fire both requests in parallel with explicit typed futures to avoid
-      // Future.wait collapsing the return type to List<Object>.
-      final storedFuture    = DataService.instance.getPatients();
-      final medicinesFuture = DataService.instance.getMedicines();
-
-      final stored    = await storedFuture;
-      final medicines = await medicinesFuture;
-
-      if (mounted) {
-        setState(() {
-          _patients = PatientData.merge(
-            stored:    stored,
-            medicines: medicines,
-          );
-        });
-      }
+      final patients = await DataService.instance.getPatients();
+      if (mounted) setState(() => _patients = patients);
     } catch (_) {
       if (mounted) setState(() {
         _patients = [];
@@ -92,7 +77,6 @@ class _PatientListScreenState extends State<PatientListScreen> {
         ),
       ),
 
-      // FAB → Add Patient screen
       floatingActionButton: FloatingActionButton(
         heroTag: 'patients-fab',
         onPressed: () async {
@@ -185,7 +169,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        itemCount: patients.length + 1, // +1 for the count header
+        itemCount: patients.length + 1, // +1 for count header
         itemBuilder: (context, i) {
           if (i == 0) {
             return Padding(
@@ -210,25 +194,56 @@ class _PatientListScreenState extends State<PatientListScreen> {
   // ── Patient card ──────────────────────────────────────────────────────────
 
   Widget _buildPatientCard(PatientData patient) {
-    return GestureDetector(
-      onTap: () async {
-        await context.push(AppRoutes.patientDetail, extra: patient);
+    return Dismissible(
+      key: ValueKey(patient.id),
+      direction: DismissDirection.endToStart,
+      background: const SizedBox.shrink(),
+      secondaryBackground: _deleteBg(),
+      confirmDismiss: (_) => showDialog<bool>(
+        context: context,
+        builder: (dlg) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(patient.name,
+              style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary)),
+          content: Text(
+            'Remove ${patient.name} from your patient list? '
+            'Their medicines will not be deleted.',
+            style: const TextStyle(fontSize: 14, color: _kLabel),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dlg).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: _kLabel)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dlg).pop(true),
+              child: const Text('Delete',
+                  style: TextStyle(
+                      color: AppColors.danger, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+      onDismissed: (_) async {
+        await DataService.instance.deletePatient(patient.id);
         _reload();
       },
-      child: Container(
+      child: GestureDetector(
+        onTap: () async {
+          await context.push(AppRoutes.patientDetail, extra: patient);
+          _reload();
+        },
+        child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: patient.hasAlerts
-                ? (patient.expiringCount > 0
-                    ? AppColors.dangerBorder
-                    : AppColors.warningBorder)
-                : AppColors.border,
-            width: patient.hasAlerts ? 1.0 : 0.5,
-          ),
+          border: Border.all(color: AppColors.border, width: 0.5),
         ),
         child: Row(
           children: [
@@ -253,7 +268,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
             ),
             const SizedBox(width: 14),
 
-            // Name + meta + status
+            // Name + relationship
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,15 +304,11 @@ class _PatientListScreenState extends State<PatientListScreen> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    patient.medicineCount == 0
-                        ? 'No medicines yet'
-                        : '${patient.medicineCount} medicine${patient.medicineCount == 1 ? '' : 's'}',
-                    style: const TextStyle(fontSize: 13, color: _kLabel),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tap to view medicines',
+                    style: TextStyle(fontSize: 12, color: _kLabel),
                   ),
-                  const SizedBox(height: 8),
-                  _buildStatusRow(patient),
                 ],
               ),
             ),
@@ -306,71 +317,23 @@ class _PatientListScreenState extends State<PatientListScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
-  Widget _buildStatusRow(PatientData patient) {
-    if (patient.medicineCount == 0) {
-      return Row(
-        children: [
-          Container(
-            width: 6, height: 6,
-            decoration: const BoxDecoration(
-              color: _kLabel, shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Text(
-            'Add a medicine to get started',
-            style: TextStyle(fontSize: 12, color: _kLabel),
-          ),
-        ],
-      );
-    }
-    if (!patient.hasAlerts) {
-      return Row(
-        children: [
-          Container(
-            width: 6, height: 6,
-            decoration: const BoxDecoration(
-              color: AppColors.primary, shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Text(
-            'All medicines OK',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.primary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      );
-    }
-    return Wrap(
-      spacing: 6, runSpacing: 4,
-      children: [
-        if (patient.expiringCount > 0)
-          _statusChip('${patient.expiringCount} expiring',
-              AppColors.dangerLight, AppColors.danger),
-        if (patient.openedCount > 0)
-          _statusChip('${patient.openedCount} opened',
-              AppColors.warningLight, AppColors.warning),
-      ],
-    );
-  }
+  // ── Swipe-delete background ───────────────────────────────────────────────
 
-  Widget _statusChip(String label, Color bg, Color fg) {
+  Widget _deleteBg() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(20),
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
-      ),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      child: const Icon(Icons.delete_outline_rounded,
+          color: Colors.white, size: 22),
     );
   }
 

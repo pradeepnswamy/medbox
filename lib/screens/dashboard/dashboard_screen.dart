@@ -8,6 +8,7 @@ import '../../config/app_colors.dart';
 import '../../config/app_router.dart';
 import '../../models/alert_item.dart';
 import '../../models/medicine.dart';
+import '../../models/patient.dart';
 import '../../models/prescription.dart';
 import '../../services/data_service.dart';
 import '../../services/alert_engine.dart';
@@ -29,6 +30,11 @@ class DashboardScreen extends StatefulWidget {
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
+
+  /// Called by [MainShell] whenever the dashboard branch is activated from
+  /// a different tab, so the data reloads even though initState() doesn't re-run
+  /// (StatefulShellRoute keeps widget state alive across tab switches).
+  static VoidCallback? onBranchActivated;
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -36,23 +42,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Async data — all null until Firestore responds ────────────────────────
   List<MedicineData>?     _medicines;
+  List<PatientData>       _patients      = [];
   List<PrescriptionData>? _prescriptions;
   List<AlertItem>?        _alerts;
 
   // ── Connectivity ──────────────────────────────────────────────────────────
   bool _isOffline = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
 
+    // ── Wait for Firebase Auth to confirm the user before loading data ────
+    // On a fresh app launch Firebase restores the session asynchronously,
+    // so currentUser can be null at initState() time even if the user is
+    // already signed in.  authStateChanges() fires as soon as the token is
+    // ready, guaranteeing _uid is non-null when _reload() runs.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null && mounted) _reload();
+    });
+
+    // Register the tab-reselect callback so MainShell can trigger a reload
+    // when the user switches back to the dashboard from another tab.
+    DashboardScreen.onBranchActivated = _reload;
+
     // ── Real-time connectivity monitoring ─────────────────────────────────
-    // Check current state immediately, then listen for changes.
     Connectivity().checkConnectivity().then(_handleConnectivity);
     _connectivitySub = Connectivity().onConnectivityChanged.listen(_handleConnectivity);
-
-    _reload();
 
     // Ask for notification permission the first time the dashboard loads.
     // The OS only shows the system dialog once; subsequent calls are silent.
@@ -74,26 +92,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    DashboardScreen.onBranchActivated = null;
+    _authSub?.cancel();
     _connectivitySub?.cancel();
     super.dispose();
   }
 
   Future<void> _reload() async {
-    try {
-      // AlertEngine.sync() is already timeout-resilient internally.
-      await AlertEngine.sync();
+    // AlertEngine.sync is fire-and-forget — its failure must NOT block or abort
+    // the data load.  Any Firestore write error inside sync was silently killing
+    // the entire _reload(), leaving the dashboard showing zeros.
+    unawaited(
+      AlertEngine.sync().catchError((e) {
+        debugPrint('[Dashboard] AlertEngine.sync error (non-fatal): $e');
+      }),
+    );
 
-      final medicines     = await DataService.instance.getMedicines();
-      final prescriptions = await DataService.instance.getPrescriptions();
-      final alerts        = await DataService.instance.getAlerts();
+    try {
+      // Load all collections in parallel for speed.
+      final results = await Future.wait([
+        DataService.instance.getMedicines(),
+        DataService.instance.getPatients(),
+        DataService.instance.getPrescriptions(),
+        DataService.instance.getAlerts(),
+      ]);
+
       if (mounted) {
         setState(() {
-          _medicines     = medicines;
-          _prescriptions = prescriptions;
-          _alerts        = alerts;
+          _medicines     = results[0] as List<MedicineData>;
+          _patients      = results[1] as List<PatientData>;
+          _prescriptions = results[2] as List<PrescriptionData>;
+          _alerts        = results[3] as List<AlertItem>;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Dashboard] Data load error: $e');
       // Data load failed — keep whatever was already loaded (if anything).
       // The connectivity banner already communicates the offline state.
       if (mounted) {
@@ -122,24 +155,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<MedicineData>     get _recentMedicines     => (_medicines ?? []).take(3).toList();
   List<PrescriptionData> get _recentPrescriptions => (_prescriptions ?? []).take(2).toList();
 
-  // Unique patients derived from loaded medicines
-  List<Map<String, dynamic>> get _patients {
-    if (_medicines == null) return [];
-    final seen = <String>{};
-    final result = <Map<String, dynamic>>[];
-    for (final m in _medicines!) {
-      if (!seen.contains(m.patient)) {
-        seen.add(m.patient);
-        final count = _medicines!.where((x) => x.patient == m.patient).length;
-        result.add({
-          'name':     m.patient,
-          'initials': m.patientInitials,
-          'color':    m.patientAvatarColor,
-          'medCount': count,
-        });
+  /// Quick O(1) lookup: patientId → PatientData.
+  Map<String, PatientData> get _patientMap =>
+      {for (final p in _patients) p.id: p};
+
+  /// Medicine count per patient, derived from loaded medicines.
+  Map<String, int> get _medCountByPatient {
+    final counts = <String, int>{};
+    for (final m in _medicines ?? []) {
+      if (m.patientId != null) {
+        counts[m.patientId!] = (counts[m.patientId!] ?? 0) + 1;
       }
     }
-    return result;
+    return counts;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -149,50 +177,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: _kBg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              if (_isOffline) ...[
-                const SizedBox(height: 16),
-                _buildOfflineBanner(),
+        child: RefreshIndicator(
+          color: _kGreen,
+          onRefresh: _reload,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                if (_isOffline) ...[
+                  const SizedBox(height: 16),
+                  _buildOfflineBanner(),
+                ],
+                const SizedBox(height: 24),
+                _buildSectionLabel('OVERVIEW'),
+                const SizedBox(height: 12),
+                _buildOverviewGrid(),
+                const SizedBox(height: 24),
+                _buildSectionLabel('ACTIVE ALERTS'),
+                const SizedBox(height: 12),
+                _buildAlerts(),
+                const SizedBox(height: 24),
+                _buildSectionLabelWithAction(
+                  'PATIENTS', 'See all',
+                  () => context.go(AppRoutes.patients),
+                ),
+                const SizedBox(height: 12),
+                _buildPatients(),
+                const SizedBox(height: 24),
+                _buildSectionLabelWithAction(
+                  'RECENT MEDICINES', 'See all',
+                  () => context.go(AppRoutes.medicines),
+                ),
+                const SizedBox(height: 12),
+                _buildMedicines(),
+                const SizedBox(height: 24),
+                _buildSectionLabelWithAction(
+                  'RECENT PRESCRIPTIONS', 'See all',
+                  () => context.go(AppRoutes.prescriptions),
+                ),
+                const SizedBox(height: 12),
+                _buildPrescriptions(),
+                const SizedBox(height: 24),
+                _buildSectionLabel('QUICK ACTIONS'),
+                const SizedBox(height: 12),
+                _buildQuickActions(),
               ],
-              const SizedBox(height: 24),
-              _buildSectionLabel('OVERVIEW'),
-              const SizedBox(height: 12),
-              _buildOverviewGrid(),
-              const SizedBox(height: 24),
-              _buildSectionLabel('ACTIVE ALERTS'),
-              const SizedBox(height: 12),
-              _buildAlerts(),
-              const SizedBox(height: 24),
-              _buildSectionLabelWithAction(
-                'PATIENTS', 'See all',
-                () => context.go(AppRoutes.patients),
-              ),
-              const SizedBox(height: 12),
-              _buildPatients(),
-              const SizedBox(height: 24),
-              _buildSectionLabelWithAction(
-                'RECENT MEDICINES', 'See all',
-                () => context.go(AppRoutes.medicines),
-              ),
-              const SizedBox(height: 12),
-              _buildMedicines(),
-              const SizedBox(height: 24),
-              _buildSectionLabelWithAction(
-                'RECENT PRESCRIPTIONS', 'See all',
-                () => context.go(AppRoutes.prescriptions),
-              ),
-              const SizedBox(height: 12),
-              _buildPrescriptions(),
-              const SizedBox(height: 24),
-              _buildSectionLabel('QUICK ACTIONS'),
-              const SizedBox(height: 12),
-              _buildQuickActions(),
-            ],
+            ),
           ),
         ),
       ),
@@ -494,9 +527,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Patients — derived from loaded medicines ───────────────────────────────
+  // ── Patients — loaded from Firestore ─────────────────────────────────────
 
   Widget _buildPatients() {
+    // Show spinner until the first reload completes.
     if (_medicines == null) {
       return const Center(
         child: Padding(
@@ -507,27 +541,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     if (_patients.isEmpty) {
       return const Text(
-        'No patients yet — add a medicine to get started.',
+        'No patients yet — add a patient to get started.',
         style: TextStyle(fontSize: 13, color: _kSectionLabel),
       );
     }
+    final medCounts = _medCountByPatient;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(_patients.length, (i) {
-          final p = _patients[i];
+        children: _patients.asMap().entries.map((entry) {
+          final i = entry.key;
+          final p = entry.value;
           return PatientChip(
-            initials:    p['initials'] as String,
-            name:        p['name'] as String,
-            medCount:    p['medCount'] as int,
-            avatarColor: p['color'] as Color,
+            initials:    p.initials,
+            name:        p.name,
+            medCount:    medCounts[p.id] ?? 0,
+            avatarColor: p.avatarColor,
             isSelected:  i == _selectedPatient,
             onTap: () {
               setState(() => _selectedPatient = i);
-              context.go(AppRoutes.patients);
+              context.push(AppRoutes.patientDetail, extra: p);
             },
           );
-        }),
+        }).toList(),
       ),
     );
   }
@@ -549,6 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         style: TextStyle(fontSize: 13, color: _kSectionLabel),
       );
     }
+    final patMap = _patientMap;
     return Column(
       children: _recentMedicines.map((med) {
         MedicineStatus tileStatus;
@@ -563,11 +600,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tileStatus = MedicineStatus.available;
         }
         return MedicineTile(
-          name:        med.name,
-          patient:     med.patient,
+          name:         med.name,
+          patientName:  med.patientId != null ? patMap[med.patientId]?.name : null,
           acquiredDate: med.acquiredDate,
-          status:      tileStatus,
-          expiryDate:  'Exp ${med.expiryLabel}',
+          status:       tileStatus,
+          expiryDate:   'Exp ${med.expiryLabel}',
           onTap: () async {
             await context.push(AppRoutes.medicineDetail, extra: med);
             _reload();

@@ -350,7 +350,6 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
         initials:     _initials,
         avatarColor:  _selectedColor,
         relationship: _selectedRelationship,
-        medicines:    [],
       );
 
       await DataService.instance.addPatient(patient);

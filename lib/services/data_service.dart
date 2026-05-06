@@ -122,13 +122,63 @@ class DataService {
     }).toList();
   }
 
+  /// Convenience: returns all patients keyed by Firestore document ID.
+  /// Useful for O(1) patient-name lookups when rendering medicine lists.
+  Future<Map<String, PatientData>> getPatientsMap() async {
+    final list = await getPatients();
+    return {for (final p in list) p.id: p};
+  }
+
+  /// Fetches medicines belonging to a specific patient using a server-side
+  /// Firestore filter — more efficient than loading all and filtering in Dart.
+  Future<List<MedicineData>> getMedicinesByPatient(String patientId) async {
+    if (_uid == null) return [];
+    final snap = await _fetch(
+      _col('medicines').where('patientId', isEqualTo: patientId),
+    );
+    return snap.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      return MedicineData.fromJson({'id': doc.id, ...data});
+    }).toList();
+  }
+
+  /// Fetches a single patient by Firestore document ID.
+  /// Returns null if the document does not exist.
+  Future<PatientData?> getPatient(String patientId) async {
+    if (_uid == null) return null;
+    try {
+      final doc = await _col('patients').doc(patientId).get()
+          .timeout(_kTimeout);
+      if (!doc.exists) return null;
+      return PatientData.fromFirestore(doc.id, doc.data() as Map<String, dynamic>);
+    } on TimeoutException {
+      return null;
+    }
+  }
+
   Future<void> addPatient(PatientData patient) async {
     if (_uid == null) return;
     await _col('patients').add(patient.toFirestore());
   }
 
+  /// Deletes the patient and unlinks any medicines that referenced them
+  /// (sets their patientId to null so they become OTC/unassigned).
   Future<void> deletePatient(String patientId) async {
     if (_uid == null) return;
+
+    // Unlink medicines before deleting the patient so they are never orphaned.
+    final linkedMeds = await getMedicinesByPatient(patientId);
+    if (linkedMeds.isNotEmpty) {
+      final batch = _db.batch();
+      for (final med in linkedMeds) {
+        batch.update(
+          _col('medicines').doc(med.id),
+          {'patientId': null},
+        );
+      }
+      await batch.commit();
+    }
+
     await _col('patients').doc(patientId).delete();
   }
 
@@ -150,6 +200,11 @@ class DataService {
     await _col('prescriptions')
         .doc(rx.id.isEmpty ? null : rx.id)
         .set(rx.toFirestore());
+  }
+
+  Future<void> updatePrescription(PrescriptionData rx) async {
+    if (_uid == null || rx.id.isEmpty) return;
+    await _col('prescriptions').doc(rx.id).update(rx.toFirestore());
   }
 
   Future<void> deletePrescription(String prescriptionId) async {

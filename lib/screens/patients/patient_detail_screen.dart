@@ -5,7 +5,7 @@ import '../../config/app_router.dart';
 import '../../models/medicine.dart';
 import '../../models/patient.dart';
 import '../../services/data_service.dart';
-import '../dashboard/components/medicine_tile.dart';
+import '../medicines/components/badge_chip.dart';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const _kBg    = AppColors.surface;
@@ -23,36 +23,144 @@ class PatientDetailScreen extends StatefulWidget {
 }
 
 class _PatientDetailScreenState extends State<PatientDetailScreen> {
-  // Keep a live copy so add/edit/delete reflects immediately.
-  late PatientData _patient;
+  late PatientData       _patient;
+  List<MedicineData>?    _medicines;     // medicines linked to this patient
+  List<MedicineData>     _allMedicines = []; // full library (for picker)
 
   @override
   void initState() {
     super.initState();
     _patient = widget.patient;
+    _reload();
   }
 
   Future<void> _reload() async {
-    // Re-merge stored patients + medicines to get fresh medicine list.
-    final storedFuture    = DataService.instance.getPatients();
-    final medicinesFuture = DataService.instance.getMedicines();
-    final stored    = await storedFuture;
-    final medicines = await medicinesFuture;
-
+    // Load patient record, linked medicines, and the full library in parallel.
+    final results = await Future.wait([
+      DataService.instance.getPatients(),
+      DataService.instance.getMedicinesByPatient(_patient.id),
+      DataService.instance.getMedicines(),
+    ]);
     if (!mounted) return;
 
-    final merged = PatientData.merge(stored: stored, medicines: medicines);
-    final updated = merged.firstWhere(
-      (p) => p.name == _patient.name,
+    final patients    = results[0] as List<PatientData>;
+    final linked      = results[1] as List<MedicineData>;
+    final allMeds     = results[2] as List<MedicineData>;
+
+    final updated = patients.firstWhere(
+      (p) => p.id == _patient.id,
       orElse: () => _patient,
     );
-    setState(() => _patient = updated);
+
+    setState(() {
+      _patient      = updated;
+      _medicines    = linked;
+      _allMedicines = allMeds;
+    });
   }
+
+  // ── Medicine picker ───────────────────────────────────────────────────────────
+
+  /// Opens a bottom-sheet that lists every medicine in the library that is
+  /// not yet linked to this patient.  Selecting one links it; the "Add new"
+  /// button navigates to AddMedicineScreen with this patient pre-selected.
+  Future<void> _showMedicinePicker() async {
+    final linkedIds = (_medicines ?? []).map((m) => m.id).toSet();
+    final available = _allMedicines
+        .where((m) => !linkedIds.contains(m.id))
+        .toList();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MedicinePickerSheet(
+        available: available,
+        onSelected: _linkMedicine,
+        onAddNew: _goAddNewMedicine,
+      ),
+    );
+  }
+
+  Future<void> _linkMedicine(MedicineData med) async {
+    await DataService.instance
+        .updateMedicine(med.copyWith(patientId: _patient.id));
+    if (mounted) _reload();
+  }
+
+  Future<void> _goAddNewMedicine() async {
+    await context.push(AppRoutes.medicinesAdd, extra: _patient.id);
+    if (mounted) _reload();
+  }
+
+  // ── Medicine removal ──────────────────────────────────────────────────────────
+
+  /// Shows a dialog offering Unlink or Delete, executes the chosen action,
+  /// and returns [true] so the Dismissible removes the tile (the reload
+  /// also refreshes the list).  Returns [false] on Cancel so it bounces back.
+  Future<bool?> _confirmRemoveMedicine(MedicineData med) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dlg) => AlertDialog(
+        backgroundColor: _kCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          med.name,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: const Text(
+          'What would you like to do with this medicine?',
+          style: TextStyle(fontSize: 14, color: _kGrey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dlg).pop(null),
+            child: const Text('Cancel', style: TextStyle(color: _kGrey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dlg).pop('unlink'),
+            child: const Text(
+              'Unlink from patient',
+              style: TextStyle(
+                  color: AppColors.primary, fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dlg).pop('delete'),
+            child: const Text(
+              'Delete medicine',
+              style: TextStyle(
+                  color: AppColors.danger, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (action == null || !mounted) return false; // Cancel → bounce back
+
+    if (action == 'unlink') {
+      await DataService.instance
+          .updateMedicine(med.copyWith(patientId: null));
+    } else if (action == 'delete') {
+      await DataService.instance
+          .deleteMedicine(med.id, photoPath: med.photoPath);
+    }
+
+    if (mounted) _reload();
+    return true; // Let Dismissible complete the slide-out animation
+  }
+
+  // ── Patient deletion ──────────────────────────────────────────────────────────
 
   Future<void> _onDelete() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dlg) => AlertDialog(
         backgroundColor: _kCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
@@ -64,17 +172,17 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           ),
         ),
         content: Text(
-          'This removes ${_patient.name} from your patient list. Their medicines will not be deleted.',
+          'This removes ${_patient.name} from your patient list. '
+          'Their medicines will not be deleted.',
           style: const TextStyle(fontSize: 14, color: _kGrey),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel',
-                style: TextStyle(color: _kGrey)),
+            onPressed: () => Navigator.of(dlg).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: _kGrey)),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dlg).pop(true),
             child: const Text('Delete',
                 style: TextStyle(
                     color: AppColors.danger, fontWeight: FontWeight.bold)),
@@ -89,10 +197,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       await DataService.instance.deletePatient(_patient.id);
     }
 
-    if (mounted) context.pop(true); // signal caller to reload
+    if (mounted) context.pop(true);
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -113,8 +221,6 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHero(),
-                      const SizedBox(height: 24),
-                      _buildStatusRow(),
                       const SizedBox(height: 28),
                       _buildMedicinesSection(),
                       if (_patient.isExplicit) ...[
@@ -132,7 +238,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     );
   }
 
-  // ── Top bar ───────────────────────────────────────────────────────────────
+  // ── Top bar ───────────────────────────────────────────────────────────────────
 
   Widget _buildTopBar() {
     return Padding(
@@ -166,20 +272,18 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
             ),
           ),
           const Spacer(),
-          // Mirror space for centering the title
           const SizedBox(width: 72),
         ],
       ),
     );
   }
 
-  // ── Hero — avatar + name + relationship ───────────────────────────────────
+  // ── Hero ──────────────────────────────────────────────────────────────────────
 
   Widget _buildHero() {
     return Center(
       child: Column(
         children: [
-          // Avatar
           Container(
             width: 80,
             height: 80,
@@ -206,8 +310,6 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
             ),
           ),
           const SizedBox(height: 14),
-
-          // Name
           Text(
             _patient.name,
             style: const TextStyle(
@@ -216,13 +318,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               color: AppColors.textPrimary,
             ),
           ),
-
-          // Relationship badge
           if (_patient.relationship.isNotEmpty) ...[
             const SizedBox(height: 6),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
@@ -243,129 +342,19 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     );
   }
 
-  // ── Status row ────────────────────────────────────────────────────────────
-
-  Widget _buildStatusRow() {
-    if (_patient.medicineCount == 0) {
-      return _buildInfoBanner(
-        icon: Icons.medication_outlined,
-        iconColor: _kGrey,
-        text: 'No medicines linked yet.',
-        bgColor: _kCard,
-      );
-    }
-
-    if (!_patient.hasAlerts) {
-      return _buildInfoBanner(
-        icon: Icons.check_circle_rounded,
-        iconColor: _kGreen,
-        text: 'All medicines are in good shape.',
-        bgColor: AppColors.primaryLight,
-        textColor: AppColors.primaryDark,
-      );
-    }
-
-    return Row(
-      children: [
-        if (_patient.expiringCount > 0)
-          Expanded(
-            child: _buildStatChip(
-              label: 'Expiring soon',
-              value: '${_patient.expiringCount}',
-              bg:    AppColors.dangerLight,
-              fg:    AppColors.danger,
-            ),
-          ),
-        if (_patient.expiringCount > 0 && _patient.openedCount > 0)
-          const SizedBox(width: 12),
-        if (_patient.openedCount > 0)
-          Expanded(
-            child: _buildStatChip(
-              label: 'Opened 3+ mo',
-              value: '${_patient.openedCount}',
-              bg:    AppColors.warningLight,
-              fg:    AppColors.warning,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildInfoBanner({
-    required IconData icon,
-    required Color iconColor,
-    required String text,
-    required Color bgColor,
-    Color? textColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: iconColor, size: 20),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 13,
-                color: textColor ?? _kGrey,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatChip({
-    required String label,
-    required String value,
-    required Color bg,
-    required Color fg,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: fg,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: fg.withOpacity(0.8)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Medicines section ─────────────────────────────────────────────────────
+  // ── Medicines section ─────────────────────────────────────────────────────────
 
   Widget _buildMedicinesSection() {
+    final meds = _medicines;
     return Column(
       children: [
-        // Section header with Add button
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'MEDICINES (${_patient.medicineCount})',
+              meds == null
+                  ? 'MEDICINES'
+                  : 'MEDICINES (${meds.length})',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -374,13 +363,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () async {
-                await context.push(
-                  AppRoutes.medicinesAdd,
-                  extra: {'patient': _patient.name},
-                );
-                _reload();
-              },
+              onTap: _showMedicinePicker,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: const [
@@ -401,8 +384,14 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Medicine tiles
-        if (_patient.medicines.isEmpty)
+        if (meds == null)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: CircularProgressIndicator(color: _kGreen),
+            ),
+          )
+        else if (meds.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
@@ -414,10 +403,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                       color: AppColors.primaryLight,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.medication_outlined,
-                      color: _kGreen, size: 28,
-                    ),
+                    child: const Icon(Icons.medication_outlined,
+                        color: _kGreen, size: 28),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -430,7 +417,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Tap "Add medicine" above to log one.',
+                    'Tap "Add medicine" above to link or create one.',
                     style: TextStyle(fontSize: 13, color: _kGrey),
                   ),
                 ],
@@ -439,36 +426,112 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           )
         else
           Column(
-            children: _patient.medicines.map((med) {
-              MedicineStatus tileStatus;
-              switch (med.topStatus) {
-                case 'Expiring':
-                  tileStatus = MedicineStatus.expiring;
-                  break;
-                case 'Opened':
-                  tileStatus = MedicineStatus.opened;
-                  break;
-                default:
-                  tileStatus = MedicineStatus.available;
-              }
-              return MedicineTile(
-                name:         med.name,
-                patient:      med.patient,
-                acquiredDate: med.acquiredDate,
-                status:       tileStatus,
-                expiryDate:   'Exp ${med.expiryLabel}',
-                onTap: () async {
-                  await context.push(AppRoutes.medicineDetail, extra: med);
-                  _reload();
-                },
-              );
-            }).toList(),
+            children: meds.map(_buildMedicineTile).toList(),
           ),
       ],
     );
   }
 
-  // ── Delete button ─────────────────────────────────────────────────────────
+  Widget _buildMedicineTile(MedicineData med) {
+    BadgeStyle badgeStyle;
+    Color iconColor;
+    String statusLabel;
+    switch (med.topStatus) {
+      case 'Expiring':
+        badgeStyle  = BadgeStyle.expiring;
+        iconColor   = AppColors.danger;
+        statusLabel = 'Expiring';
+        break;
+      case 'Opened':
+        badgeStyle  = BadgeStyle.opened;
+        iconColor   = AppColors.warning;
+        statusLabel = 'Opened';
+        break;
+      default:
+        badgeStyle  = BadgeStyle.available;
+        iconColor   = _kGreen;
+        statusLabel = 'Available';
+    }
+
+    return Dismissible(
+      key: ValueKey(med.id),
+      direction: DismissDirection.endToStart,
+      background: const SizedBox.shrink(),
+      secondaryBackground: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppColors.danger,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete_outline_rounded,
+            color: Colors.white, size: 22),
+      ),
+      confirmDismiss: (_) => _confirmRemoveMedicine(med),
+      onDismissed: (_) {
+        // Item already removed by _confirmRemoveMedicine which calls _reload()
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          await context.push(AppRoutes.medicineDetail, extra: med);
+          _reload();
+        },
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: _kCard,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.medication_rounded,
+                    color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(med.name,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text(med.acquiredDate,
+                        style:
+                            const TextStyle(fontSize: 12, color: _kGrey)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  BadgeChip(label: statusLabel, style: badgeStyle),
+                  const SizedBox(height: 4),
+                  Text('Exp ${med.expiryLabel}',
+                      style:
+                          const TextStyle(fontSize: 11, color: _kGrey)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Delete button ─────────────────────────────────────────────────────────────
 
   Widget _buildDeleteButton() {
     return GestureDetector(
@@ -492,6 +555,207 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Medicine picker bottom sheet ───────────────────────────────────────────────
+
+class _MedicinePickerSheet extends StatefulWidget {
+  final List<MedicineData>         available;
+  final ValueChanged<MedicineData> onSelected;
+  final VoidCallback               onAddNew;
+
+  const _MedicinePickerSheet({
+    required this.available,
+    required this.onSelected,
+    required this.onAddNew,
+  });
+
+  @override
+  State<_MedicinePickerSheet> createState() => _MedicinePickerSheetState();
+}
+
+class _MedicinePickerSheetState extends State<_MedicinePickerSheet> {
+  late final TextEditingController _searchCtrl;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+    _searchCtrl.addListener(() {
+      if (mounted) setState(() => _query = _searchCtrl.text.toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<MedicineData> get _filtered {
+    if (_query.isEmpty) return widget.available;
+    return widget.available
+        .where((m) => m.name.toLowerCase().contains(_query))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize:     0.4,
+      maxChildSize:     0.92,
+      expand: false,
+      builder: (_, scrollCtrl) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              const SizedBox(height: 10),
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Add medicine',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: false,
+                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Search medicines…',
+                    hintStyle: const TextStyle(
+                        fontSize: 14, color: AppColors.textSecondary),
+                    prefixIcon: const Icon(Icons.search,
+                        size: 18, color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.card,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Medicine list
+              Expanded(
+                child: _filtered.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            _query.isEmpty
+                                ? 'All medicines are already linked to this patient.\nTap "Add new medicine" below to create one.'
+                                : 'No medicines match "$_query".',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textSecondary),
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _filtered.length,
+                        itemBuilder: (_, i) {
+                          final med = _filtered[i];
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                              width: 38, height: 38,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.medication_rounded,
+                                  size: 20, color: AppColors.primary),
+                            ),
+                            title: Text(med.name,
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary)),
+                            subtitle: med.dosage.isNotEmpty
+                                ? Text(med.dosage,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary))
+                                : null,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              widget.onSelected(med);
+                            },
+                          );
+                        },
+                      ),
+              ),
+
+              // "Add new medicine" footer
+              Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottomInset),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      widget.onAddNew();
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add new medicine',
+                        style: TextStyle(fontSize: 15)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(
+                          color: AppColors.primary.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

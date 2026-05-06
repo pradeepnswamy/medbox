@@ -151,17 +151,19 @@ final appRouter = GoRouter(
     // ── Detail / modal routes ─────────────────────────────────────────────────
 
     // Add / edit medicine.
-    //   extra: MedicineData          → edit mode
-    //   extra: {'patient': 'Name'}   → new with patient pre-filled
-    //   extra: null                  → new, blank
+    //   extra: MedicineData → edit mode
+    //   extra: MedicineData → edit mode
+    //   extra: String       → add mode with pre-selected patient id
+    //   extra: null         → new, blank
     GoRoute(
       path: AppRoutes.medicinesAdd,
       builder: (context, state) {
         final extra = state.extra;
         if (extra is MedicineData) {
           return AddMedicineScreen(existing: extra);
-        } else if (extra is Map<String, dynamic>) {
-          return AddMedicineScreen(initialPatient: extra['patient'] as String?);
+        }
+        if (extra is String) {
+          return AddMedicineScreen(initialPatientId: extra);
         }
         return const AddMedicineScreen();
       },

@@ -9,7 +9,9 @@ import 'badge_chip.dart';
 /// [badges] is an ordered list of (label, style) pairs rendered as pill chips.
 class MedicineListCard extends StatelessWidget {
   final String name;
-  final String patient;
+  /// Optional patient name shown below the medicine name.
+  /// Null when no patient is associated (OTC / shared medicine).
+  final String? patientName;
   final String acquiredDate;
   final String expiryLabel;
   final Color expiryColor;
@@ -20,7 +22,7 @@ class MedicineListCard extends StatelessWidget {
   const MedicineListCard({
     super.key,
     required this.name,
-    required this.patient,
+    this.patientName,
     required this.acquiredDate,
     required this.expiryLabel,
     required this.expiryColor,
@@ -100,7 +102,9 @@ class MedicineListCard extends StatelessWidget {
 
                   // Patient · acquired date
                   Text(
-                    '$patient · $acquiredDate',
+                    patientName != null
+                        ? '$patientName · $acquiredDate'
+                        : acquiredDate,
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,

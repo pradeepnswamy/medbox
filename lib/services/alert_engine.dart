@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Color;
 
 import '../models/alert_item.dart';
 import '../models/medicine.dart';
+import '../models/patient.dart';
 import '../utils/date_utils.dart';
 import 'notification_service.dart';
 
@@ -81,6 +83,13 @@ abstract final class AlertEngine {
       return MedicineData.fromJson({'id': doc.id, ...data});
     }).toList();
 
+    // ── 1b. Load patients for name/initials/color resolution ──────────────────
+    final patSnap = await _col('patients').get();
+    final patientMap = <String, PatientData>{
+      for (final doc in patSnap.docs)
+        doc.id: PatientData.fromFirestore(doc.id, doc.data() as Map<String, dynamic>),
+    };
+
     // ── 2. Load existing alerts — preserve isDismissed per doc ────────────────
     final alertSnap = await _col('alerts').get();
     final wasDismissed = <String, bool>{};
@@ -93,8 +102,8 @@ abstract final class AlertEngine {
     final shouldExist = <String, Map<String, dynamic>>{};
 
     for (final med in medicines) {
-      _computeExpiringAlert(med, shouldExist, wasDismissed);
-      _computeOpenedAlert(med, shouldExist, wasDismissed);
+      _computeExpiringAlert(med, shouldExist, wasDismissed, patientMap);
+      _computeOpenedAlert(med, shouldExist, wasDismissed, patientMap);
     }
 
     // ── 4. Batch write ────────────────────────────────────────────────────────
@@ -133,6 +142,7 @@ abstract final class AlertEngine {
     MedicineData med,
     Map<String, Map<String, dynamic>> shouldExist,
     Map<String, bool> wasDismissed,
+    Map<String, PatientData> patientMap,
   ) {
     final expiryDate = _resolveExpiryDate(med);
     if (expiryDate == null) return;
@@ -155,8 +165,9 @@ abstract final class AlertEngine {
       daysLabel = '$daysLeft day${daysLeft == 1 ? '' : 's'} left';
     }
 
-    final description =
-        'Expires ${MedDateUtils.formatDate(expiryDate)} · ${med.patient}';
+    final description = 'Expires ${MedDateUtils.formatDate(expiryDate)}';
+
+    final patient = med.patientId != null ? patientMap[med.patientId] : null;
 
     final alert = AlertItem(
       id:                 alertId,
@@ -164,9 +175,9 @@ abstract final class AlertEngine {
       daysValue:          daysLeft,
       daysLabel:          daysLabel,
       description:        description,
-      patientName:        med.patient,
-      patientInitials:    med.patientInitials,
-      patientAvatarColor: med.patientAvatarColor,
+      patientName:        patient?.name        ?? '',
+      patientInitials:    patient?.initials    ?? '',
+      patientAvatarColor: patient?.avatarColor ?? const Color(0xFF4CAF50),
       type:               AlertType.expiring,
       severity:           severity,
       isDismissed:        wasDismissed[alertId] ?? false,
@@ -179,6 +190,7 @@ abstract final class AlertEngine {
     MedicineData med,
     Map<String, Map<String, dynamic>> shouldExist,
     Map<String, bool> wasDismissed,
+    Map<String, PatientData> patientMap,
   ) {
     if (!med.isOpened) return;
 
@@ -190,8 +202,9 @@ abstract final class AlertEngine {
 
     final alertId    = '${med.id}_opened';
     final daysLabel  = '$monthsOpen mo ago';
-    final description =
-        'Opened ${MedDateUtils.formatDate(openedDate)} · ${med.patient}';
+    final description = 'Opened ${MedDateUtils.formatDate(openedDate)}';
+
+    final patient = med.patientId != null ? patientMap[med.patientId] : null;
 
     final alert = AlertItem(
       id:                 alertId,
@@ -199,9 +212,9 @@ abstract final class AlertEngine {
       daysValue:          monthsOpen,
       daysLabel:          daysLabel,
       description:        description,
-      patientName:        med.patient,
-      patientInitials:    med.patientInitials,
-      patientAvatarColor: med.patientAvatarColor,
+      patientName:        patient?.name        ?? '',
+      patientInitials:    patient?.initials    ?? '',
+      patientAvatarColor: patient?.avatarColor ?? const Color(0xFF4CAF50),
       type:               AlertType.opened,
       severity:           AlertSeverity.warning,
       isDismissed:        wasDismissed[alertId] ?? false,
