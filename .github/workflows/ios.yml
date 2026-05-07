@@ -102,6 +102,13 @@ jobs:
           echo "Provisioning profile UUID: $PROFILE_UUID"
 
       # ── Build ────────────────────────────────────────────────────────────────
+      - name: Extract version name from pubspec.yaml
+        id: version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1)
+          echo "name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Build name: ${VERSION_NAME}, Build number: ${{ github.run_number }}"
+
       - name: Build IPA
         run: |
           # Generate ExportOptions.plist with the actual profile UUID
@@ -137,8 +144,8 @@ jobs:
 
           flutter build ipa --release \
             --export-options-plist ios/ExportOptions.plist \
-            --dart-define=FLUTTER_BUILD_NAME=1.0.0 \
-            --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }}
+            --build-name="${{ steps.version.outputs.name }}" \
+            --build-number="${{ github.run_number }}"
 
       # ── Upload artifact ──────────────────────────────────────────────────────
       - name: Upload IPA
