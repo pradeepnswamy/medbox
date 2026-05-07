@@ -1,0 +1,60 @@
+name: Bump build number
+
+# Runs on every push to main and increments the build number (+N) in
+# pubspec.yaml.  The commit is tagged [skip ci] so it does not re-trigger
+# the build workflows, preventing an infinite loop.
+#
+# The build workflows (android.yml / ios.yml) use github.run_number as the
+# definitive build number, so every build is unique even on the same commit.
+# pubspec.yaml is kept in sync so the repo always reflects the latest number.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # needed to push the version bump commit
+
+jobs:
+  bump:
+    name: Increment pubspec.yaml build number
+    runs-on: ubuntu-latest
+
+    # Skip if the triggering commit is already a version bump (avoids loop)
+    # and skip if it already contains [skip ci].
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !startsWith(github.event.head_commit.message, 'chore: bump build')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT or the default GITHUB_TOKEN — either works for pushing
+          # to the same repo when branch protection does not require a PR.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Bump build number in pubspec.yaml
+        id: bump
+        run: |
+          # Read the current version line, e.g. "1.0.0+5"
+          CURRENT=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//')
+          VERSION_NAME=$(echo "$CURRENT" | cut -d'+' -f1)   # "1.0.0"
+          VERSION_NUMBER=$(echo "$CURRENT" | cut -d'+' -f2) # "5"
+          NEW_NUMBER=$((VERSION_NUMBER + 1))                 # "6"
+
+          # Write the new version back
+          sed -i "s/^version:.*/version: ${VERSION_NAME}+${NEW_NUMBER}/" pubspec.yaml
+
+          echo "version-name=${VERSION_NAME}"     >> "$GITHUB_OUTPUT"
+          echo "version-number=${NEW_NUMBER}"     >> "$GITHUB_OUTPUT"
+          echo "Bumped: ${VERSION_NAME}+${VERSION_NUMBER} → ${VERSION_NAME}+${NEW_NUMBER}"
+
+      - name: Commit and push bumped version
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git commit -m "chore: bump build number to ${{ steps.bump.outputs.version-number }} [skip ci]"
+          git push

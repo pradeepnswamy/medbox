@@ -60,11 +60,18 @@ jobs:
             > android/app/medbox.jks
 
       # ── Build ────────────────────────────────────────────────────────────────
+      - name: Extract version name from pubspec.yaml
+        id: version
+        run: |
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1)
+          echo "name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Build name: ${VERSION_NAME}, Build number: ${{ github.run_number }}"
+
       - name: Build App Bundle
         run: |
           flutter build appbundle --release \
-            --dart-define=FLUTTER_BUILD_NAME=1.0.0 \
-            --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }}
+            --build-name="${{ steps.version.outputs.name }}" \
+            --build-number="${{ github.run_number }}"
         env:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS:      ${{ secrets.ANDROID_KEY_ALIAS }}
